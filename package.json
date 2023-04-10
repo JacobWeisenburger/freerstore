@@ -1,0 +1,42 @@
+{
+    "name": "freerstore",
+    "version": "0.0.1",
+    "main": "src/index.ts",
+    "author": "Jacob Weisenburger",
+    "license": "MIT",
+    "type": "module",
+    "npm": "https://www.npmjs.com/package/freerstore",
+    "repository": "https://github.com/JacobWeisenburger/freerstore",
+    "homepage": "https://github.com/JacobWeisenburger/freerstore",
+    "scripts": {
+        "start.dev": "node --no-warnings -r ./src/initLocalStorage/index.cjs --loader ts-node/esm --es-module-specifier-resolution=node dev",
+        "dev": "nodemon",
+        "dev.cmd": "start cmd /k npm run dev"
+    },
+    "nodemonConfig": {
+        "watch": [
+            "./"
+        ],
+        "ignore": [
+            "./tmp"
+        ],
+        "ext": "",
+        "exec": "cls && npm run start.dev"
+    },
+    "devDependencies": {
+        "@anatine/zod-mock": "^3.10.0",
+        "@faker-js/faker": "^7.6.0",
+        "@types/lodash": "^4.14.192",
+        "@types/node-localstorage": "^1.3.0",
+        "nodemon": "^2.0.22",
+        "ts-node": "^10.9.1"
+    },
+    "dependencies": {
+        "@js-temporal/polyfill": "^0.4.3",
+        "firebase": "^9.19.1",
+        "lodash": "^4.17.21",
+        "node-localstorage": "^2.2.1",
+        "zod": "^3.21.4",
+        "zod_utilz": "^0.7.3"
+    }
+}

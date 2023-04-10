@@ -1,0 +1,39 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "lib": [
+            "dom",
+            "dom.iterable",
+            "ESNext"
+        ],
+        "esModuleInterop": true,
+        "moduleResolution": "nodenext",
+        "module": "ESNext",
+        "target": "ESNext",
+        "jsx": "preserve",
+        "composite": false,
+        "declaration": true,
+        "declarationMap": true,
+        "forceConsistentCasingInFileNames": true,
+        "inlineSources": false,
+        "isolatedModules": false,
+        "noImplicitAny": false,
+        "preserveWatchOutput": true,
+        "skipLibCheck": true,
+        "allowJs": true,
+        "noEmit": true,
+        "incremental": true,
+        "resolveJsonModule": true
+    },
+    "ts-node": {
+        "transpileOnly": true,
+        "files": true,
+        "experimentalResolver": true
+    },
+    "include": [
+        "src"
+    ],
+    "exclude": [
+        "node_modules"
+    ]
+}
