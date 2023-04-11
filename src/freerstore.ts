@@ -18,15 +18,19 @@ const freerstoreGetterSchema = freerstoreSetterSchema.extend( {
     from: z.enum( [ 'cache', 'server' ] ),
 } )
 
-function getStorageKey ( docRef: DocumentReference ): string {
-    const ext = getExeCtx() == 'node' ? '.json' : ''
-    return `${ docRef.firestore.app.options.projectId }/${ docRef.path }${ ext }`
-        .replaceAll( '/', '.' )
-        .replaceAll( ' ', '_' )
-}
 
 export module freerstore {
 
+    export function getStorageKey (
+        ref: DocumentReference | CollectionReference,
+        suffix: string = '',
+    ): string {
+        const ext = getExeCtx() == 'node' ? '.json' : ''
+        suffix = suffix ? `.${ suffix }` : ''
+        return `${ ref.firestore.app.options.projectId }/${ ref.path }${ suffix }${ ext }`
+            .replaceAll( '/', '.' )
+            .replaceAll( ' ', '_' )
+    }
 
     export function getDB ( firebaseApp: FirebaseApp ) {
         const firestore = getFirestore( firebaseApp )

@@ -17,14 +17,14 @@ export module firestoreStats {
     export function get ( key: string = getStorageKey() ) {
         return schema.safeParse( storage.getItem( key ) ?? { reads: 0, writes: 0 } )
     }
-    export function incrementReads () {
+    export function incrementReads ( amount: number = 1 ) {
         const key = getStorageKey()
         const statsResult = get()
         if ( statsResult.success ) {
             const stats = statsResult.data
             storage.setItem( key, {
                 ...stats,
-                reads: ( stats.reads ?? 0 ) + 1,
+                reads: ( stats.reads ?? 0 ) + amount,
             } )
         }
     }
