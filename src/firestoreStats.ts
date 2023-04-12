@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { logResult } from './logResult.js'
 import { storage } from './storage.js'
 
 export module firestoreStats {
@@ -12,6 +13,10 @@ export module firestoreStats {
         return `firestoreStats.${ plainDateString }.json`
             .replaceAll( '/', '.' )
             .replaceAll( ' ', '_' )
+    }
+
+    export function log () {
+        logResult( 'firestoreStats' )( firestoreStats.get() )
     }
 
     export function get ( key: string = getStorageKey() ) {

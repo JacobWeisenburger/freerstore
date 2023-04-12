@@ -89,9 +89,5 @@ const fooDataOrErrors = result.data?.foo ?? result.error?.format().foo?._errors
 
 ## TODO
 Always open to ideas. Positive or negative, all are welcome. Feel free to contribute an [issue](https://github.com/JacobWeisenburger/freerstore/issues) or [PR](https://github.com/JacobWeisenburger/freerstore/pulls).
-- Shrink Bundle Size
-    - tree-shaking deps
-        - lodash
-- Make process for minifying
 - GitHub Actions
     - Auto publish to npm
