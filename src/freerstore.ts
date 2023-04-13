@@ -57,46 +57,6 @@ export module freerstore {
                 }
 
                 const collection = {
-                    // async getDoc ( id: string ) {
-                    //     const docRef = _doc( collectionRef, id )
-                    //     const storageKey = getStorageKey( docRef )
-
-                    //     const persistedDocDataUnknown = storage.getItem( storageKey )
-                    //     if ( persistedDocDataUnknown ) {
-                    //         const persistedDocDataResult = setterSchema.safeParse( persistedDocDataUnknown )
-                    //         if ( persistedDocDataResult.success ) {
-                    //             return getterSchema.safeParse( {
-                    //                 ...persistedDocDataResult.data,
-                    //                 freerstore: {
-                    //                     ...persistedDocDataResult.data.freerstore,
-                    //                     from: 'cache',
-                    //                 }
-                    //             } as z.infer<typeof getterSchema> )
-                    //         }
-                    //     }
-
-                    //     const docSnap = await _getDoc( docRef )
-                    //     firestoreStats.incrementReads()
-                    //     const docDataUnknown = docSnap.data()
-                    //     if ( docDataUnknown ) {
-                    //         const docDataResult = setterSchema.safeParse( docDataUnknown )
-                    //         if ( docDataResult.success ) {
-                    //             storage.setItem( storageKey, docDataResult.data )
-
-                    //             return getterSchema.safeParse( {
-                    //                 ...docDataResult.data,
-                    //                 freerstore: {
-                    //                     ...docDataResult.data.freerstore,
-                    //                     from: 'server',
-                    //                 },
-                    //             } as z.infer<typeof getterSchema> )
-                    //         }
-                    //     }
-
-                    //     storage.removeItem( storageKey )
-                    //     return getterSchema.safeParse( undefined )
-                    // },
-
                     setDoc (
                         id: string, docData: DocData
                     ): Result {
