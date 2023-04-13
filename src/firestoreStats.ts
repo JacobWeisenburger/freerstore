@@ -2,18 +2,18 @@ import { z } from 'zod'
 import { logResult } from './logResult.js'
 import { storage } from './storage.js'
 
+function getStorageKey ( date: Date = new Date ): string {
+    const [ plainDateString ] = date.toISOString().split( 'T' )
+    return `firestoreStats.${ plainDateString }.json`
+        .replaceAll( '/', '.' )
+        .replaceAll( ' ', '_' )
+}
+
 export module firestoreStats {
     const schema = z.object( {
         reads: z.number().int().nonnegative(),
         writes: z.number().int().nonnegative(),
     } ).partial()
-
-    function getStorageKey ( date: Date = new Date ): string {
-        const [ plainDateString ] = date.toISOString().split( 'T' )
-        return `firestoreStats.${ plainDateString }.json`
-            .replaceAll( '/', '.' )
-            .replaceAll( ' ', '_' )
-    }
 
     export function log () {
         logResult( 'firestoreStats' )( firestoreStats.get() )

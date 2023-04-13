@@ -1,1 +1,1 @@
-export { freerstore } from './freerstore'
+export * as freerstore from './freerstore'
