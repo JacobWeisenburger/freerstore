@@ -1,6 +1,6 @@
 {
     "name": "freerstore",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "main": "src/index.ts",
     "author": "Jacob Weisenburger",
     "license": "MIT",
@@ -8,6 +8,12 @@
     "npm": "https://www.npmjs.com/package/freerstore",
     "repository": "https://github.com/JacobWeisenburger/freerstore",
     "homepage": "https://github.com/JacobWeisenburger/freerstore",
+    "keywords": [
+        "firestore",
+        "firebase",
+        "zod",
+        "typescript"
+    ],
     "scripts": {
         "start.dev": "node --no-warnings -r ./src/initLocalStorage/index.cjs --loader ts-node/esm --es-module-specifier-resolution=node dev",
         "dev": "nodemon",
