@@ -5,6 +5,7 @@ import { getExeCtx } from './getExeCtx.js'
 import { firestoreStats } from './firestoreStats.js'
 import { makeLastSync } from './makeLastSync.js'
 import { firestore } from './firestore/index.js'
+import { debounce } from './debounce.js'
 
 export type UnknownObj = Record<string, unknown>
 
@@ -63,46 +64,77 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             getStorageKey( firestore.doc( collectionRef, docSnap.id ) ),
             result.data
         )
-
         return result
     }
 
-    const collection = {
-        setDoc (
-            id: string, docData: DocData
-        ): Result<DocData> {
-            const docDataResult = freerstoreDocSchema.safeParse( docData )
+    async function writeDoc ( docRef: firestore.DocumentReference, docData: DocData ) {
+        storage.setItem( getStorageKey( docRef ), docData )
+        await firestore.setDoc( docRef, docData )
+        firestoreStats.incrementWrites()
+    }
 
-            if ( docDataResult.success ) {
-                const docRef = firestore.doc( collectionRef, id )
-                storage.setItem( getStorageKey( docRef ), docDataResult.data )
-                firestore.setDoc( docRef, docDataResult.data )
-                firestoreStats.incrementWrites()
-            }
+    function validateDocs ( record: Record<string, DocData> = {} ) {
+        const results = new Map(
+            Object.entries( record ).map( ( [ id, value ] ) => [
+                id,
+                freerstoreDocSchema.safeParse( value )
+            ] )
+        )
+        // console.log( 'validateDocs', results )
+        return results
+    }
 
-            return docDataResult
-        },
-        setDocs ( record: Record<string, DocData> = {} ) {
-            /* TODO handle batching */
+    const docsQueue = new Map<string, FreerstoreDocData<DocData>>()
+    const commitDocsQueue = debounce(
+        200,
+        async () => {
+            const batch = firestore.writeBatch( firestoreDB )
+            docsQueue.forEach( ( docData, id ) => {
+                batch.set(
+                    firestore.doc( collectionRef, id ),
+                    docData
+                )
+            } )
 
-            const results = new Map(
-                Object.entries( record ).map( ( [ id, value ] ) => [
-                    id,
-                    collection.setDoc( id, value ),
-                ] )
+            docsQueue.clear()
+            await batch.commit()
+        }
+    )
+
+    return {
+        setDoc ( id: string, docData: DocData ): Result<DocData> {
+            const result = freerstoreDocSchema.safeParse( docData )
+            if ( result.success ) writeDoc(
+                firestore.doc( collectionRef, id ),
+                result.data
             )
-            console.log( 'results:', results )
+            return result
+        },
+        async setDocs ( record: Record<string, DocData> = {} ) {
+            const results = validateDocs( record )
+
+            results.forEach( ( result, id ) => {
+                if ( result.success ) {
+                    const keys = new Set( Object.keys( result.data ) )
+                    keys.delete( 'freerstore' )
+                    if ( keys.size > 0 ) docsQueue.set( id, result.data )
+                } else {
+                    // TODO perhaps do something with the errors
+                }
+            } )
+
+            commitDocsQueue()
             return results
         },
 
         onSnapshot ( handler: ( map: ResultsMap<DocData> ) => void ): firestore.Unsubscribe {
             /* 
-            restart onSnapshot with new lastSync after each batch
-            this prevents docs that were changed after lastSync from being
-            included in every batch until the next restart
+            Restart onSnapshot with new lastSync.get() after each batch.
+            This prevents docs that were changed after lastSync from
+            being included in every batch until the next restart.
             */
 
-            let unsub: firestore.Unsubscribe = () => { }
+            let unsubscribe: firestore.Unsubscribe = () => { }
 
             const handlerWrapper = ( snap: firestore.QuerySnapshot<DocData> ) => {
                 lastSync.set()
@@ -125,18 +157,19 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
 
             const initOnSnapshot = () => {
                 console.log( initOnSnapshot.name )
-                unsub()
-                unsub = firestore.onSnapshot( initQuery(), handlerWrapper )
+                unsubscribe()
+                unsubscribe = firestore.onSnapshot(
+                    initQuery(),
+                    handlerWrapper,
+                    console.error
+                )
             }
 
             initOnSnapshot()
 
             return () => {
-                unsub()
-                console.log( 'ext unsub' )
+                unsubscribe()
             }
         }
     }
-
-    return collection
 }

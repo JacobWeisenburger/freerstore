@@ -10,6 +10,7 @@ export {
     onSnapshot,
     QuerySnapshot,
     QueryDocumentSnapshot,
+    writeBatch,
 } from 'firebase/firestore'
 
 /* 

@@ -17,10 +17,10 @@
 </div>
 
 <div align='center'>
-    <a href='https://www.npmjs.com/package/freerstore' rel='nofollow'>
+    <a href='https://www.npmjs.com/package/freerstore' rel='nofollow' target='_blank'>
         <img alt='npm' src='https://img.shields.io/npm/v/freerstore?color=blue'>
     </a>
-    <a href='https://www.npmjs.com/package/freerstore' rel='nofollow'>
+    <a href='https://www.npmjs.com/package/freerstore' rel='nofollow' target='_blank'>
         <img alt='downloads' src='https://img.shields.io/npm/dw/freerstore?color=blue'>
     </a>
 </div>
