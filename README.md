@@ -49,28 +49,18 @@
 Always open to ideas. Positive or negative, all are welcome. Feel free to contribute an [issue](https://github.com/JacobWeisenburger/freerstore/issues) or [PR](https://github.com/JacobWeisenburger/freerstore/pulls).
 
 ## Installation
-
-### From npm (Node/Bun)
+[npmjs.com/package/freerstore](https://www.npmjs.com/package/freerstore)
 ```sh
 npm install freerstore
 yarn add freerstore
 pnpm add freerstore
-bun add freerstore
 ```
 
 ## Getting Started
 
 ### import
-#### [Node/Bun](https://www.npmjs.com/package/freerstore)
 ```ts
 import { freerstore } from 'freerstore'
-```
-
-#### [Deno](https://deno.land/x/freerstore)
-```ts
-import { freerstore } from 'https://deno.land/x/freerstore/mod.ts'
-// or
-import { freerstore } from 'npm:freerstore'
 ```
 
 <!-- ## Utilz -->
