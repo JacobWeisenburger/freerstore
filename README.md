@@ -47,7 +47,7 @@ npm install freerstore firebase zod
 
 ## Getting Started
 
-<!-- ```ts
+```ts
 import { z } from 'zod'
 import { initializeApp } from 'firebase/app'
 import { freerstore } from 'freerstore'
@@ -117,7 +117,7 @@ setTimeout( () => {
 setTimeout( () => {
     unsubscribe()
 }, 10_000 )
-``` -->
+```
 
 ## TODO
 Always open to ideas. Positive or negative, all are welcome. Feel free to contribute an [issue](https://github.com/JacobWeisenburger/freerstore/issues) or [PR](https://github.com/JacobWeisenburger/freerstore/pulls).
