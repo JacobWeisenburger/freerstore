@@ -7,22 +7,10 @@ import { makeLastSync } from './makeLastSync.js'
 import { firestore } from './firestore/index.js'
 import { debounce } from './debounce.js'
 
-export type UnknownObj = Record<string, unknown>
+export type Result<DocData extends Record<string, unknown>> =
+    z.SafeParseReturnType<DocData, DocData>
 
-export type FreerstoreMetaData = {
-    /** ISO date string */
-    modifiedAt: string
-}
-export type FreerstoreDocData<DocData extends UnknownObj> = DocData & {
-    freerstore: FreerstoreMetaData
-}
-
-export type Result<DocData extends UnknownObj> = z.SafeParseReturnType<
-    DocData,
-    FreerstoreDocData<DocData>
->
-
-export type ResultsMap<DocData extends UnknownObj> = Map<string, Result<DocData>>
+export type ResultsMap<DocData extends Record<string, unknown>> = Map<string, Result<DocData>>
 
 function getStorageKey ( ref: firestore.Ref, suffix: string = '' ): string {
     const ext = getExeCtx() == 'node' ? '.json' : ''
@@ -33,11 +21,17 @@ function getStorageKey ( ref: firestore.Ref, suffix: string = '' ): string {
 }
 
 export function getCollection<DocSchema extends z.AnyZodObject> ( {
-    firebaseApp, collectionName, documentSchema
+    firebaseApp,
+    collectionName,
+    documentSchema,
+    modifiedAtPropPath = 'freerstore.modifiedAt',
+    modifiedAtPropType = 'isoString',
 }: {
     firebaseApp: FirebaseApp,
     collectionName: string,
     documentSchema: DocSchema,
+    modifiedAtPropPath?: string,
+    modifiedAtPropType?: 'isoString' | 'date',
 } ) {
     type DocData = z.infer<DocSchema>
 
@@ -47,14 +41,31 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         firestoreDB, collectionName
     ) as firestore.CollectionReference<DocData>
 
-    const lastSync = makeLastSync( getStorageKey( collectionRef, 'lastSync' ) )
+    const [ modifiedAtTopLevelKey ] = modifiedAtPropPath.split( '.' )
 
-    const freerstoreDocSchema = documentSchema.transform( data => ( {
-        ...data,
-        freerstore: {
-            modifiedAt: new Date().toISOString()
-        }
-    } ) ) satisfies z.ZodType<FreerstoreDocData<DocData>, z.ZodTypeDef, DocData>
+    const modifiedAtPropSchema = {
+        isoString: firestore.isoStringSchema,
+        date: firestore.dateSchema,
+    }[ modifiedAtPropType ]
+
+    const lastSync = makeLastSync( {
+        storageKey: getStorageKey( collectionRef, 'lastSync' ),
+        schema: modifiedAtPropSchema,
+    } )
+
+    const freerstoreDocSchema = documentSchema.transform( docData => {
+        const value = {
+            isoString: new Date().toISOString(),
+            date: new Date(),
+        }[ modifiedAtPropType ]
+
+        const modifiedAtPropTree = modifiedAtPropPath
+            .split( '.' )
+            .reverse()
+            .reduce( ( value, key ) => ( { [ key ]: value } ), value as object )
+
+        return { ...docData, ...modifiedAtPropTree }
+    } )
 
     function handleQueryDocumentSnapshot (
         docSnap: firestore.QueryDocumentSnapshot<DocData>
@@ -80,11 +91,10 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
                 freerstoreDocSchema.safeParse( value )
             ] )
         )
-        // console.log( 'validateDocs', results )
         return results
     }
 
-    const docsQueue = new Map<string, FreerstoreDocData<DocData>>()
+    const docsQueue = new Map<string, DocData>()
     const commitDocsQueue = debounce(
         200,
         async () => {
@@ -116,8 +126,12 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             results.forEach( ( result, id ) => {
                 if ( result.success ) {
                     const keys = new Set( Object.keys( result.data ) )
-                    keys.delete( 'freerstore' )
-                    if ( keys.size > 0 ) docsQueue.set( id, result.data )
+                    keys.delete( modifiedAtTopLevelKey )
+                    if ( keys.size > 0 ) {
+                        docsQueue.set( id, result.data )
+                    } else {
+                        console.error( 'TODO Error' )
+                    }
                 } else {
                     // TODO perhaps do something with the errors
                 }
@@ -152,11 +166,10 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
 
             const initQuery = () => firestore.query(
                 collectionRef,
-                firestore.where( 'freerstore.modifiedAt', '>', lastSync.get() )
+                firestore.where( modifiedAtPropPath, '>', lastSync.get() )
             )
 
             const initOnSnapshot = () => {
-                console.log( initOnSnapshot.name )
                 unsubscribe()
                 unsubscribe = firestore.onSnapshot(
                     initQuery(),

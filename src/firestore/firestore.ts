@@ -26,3 +26,17 @@ import {
 } from 'firebase/firestore'
 
 export type Ref = DocumentReference | CollectionReference
+
+import { Timestamp } from 'firebase/firestore'
+import { z } from 'zod'
+
+export const dateSchema = z.union( [
+    z.date(),
+    z.string().pipe( z.coerce.date() ),
+    z.object( {
+        seconds: z.number(),
+        nanoseconds: z.number(),
+    } ).transform( x => new Timestamp( x.seconds, x.nanoseconds ).toDate() ),
+] )
+
+export const isoStringSchema = dateSchema.transform( x => x.toISOString() )
