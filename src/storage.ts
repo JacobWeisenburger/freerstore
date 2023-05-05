@@ -16,4 +16,16 @@ export module storage {
     export function removeItem ( key: string ) {
         localStorage.removeItem( key )
     }
+    export function filter ( cb: ( key: string, data: unknown ) => boolean ) {
+        return Array.from( getAllItems() ).filter( ( [ key, data ] ) => cb( key, data ) )
+    }
+    function getAllItems () {
+        const map = new Map<string, unknown>()
+        for ( let i = 0; i < localStorage.length; i++ ) {
+            const key = localStorage.key( i )
+            const data = key ? getItem( key ) : undefined
+            if ( key && data ) map.set( key, data )
+        }
+        return map
+    }
 }

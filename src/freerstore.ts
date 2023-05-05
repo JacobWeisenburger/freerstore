@@ -12,10 +12,17 @@ export type Result<DocData extends Record<string, unknown>> =
 
 export type ResultsMap<DocData extends Record<string, unknown>> = Map<string, Result<DocData>>
 
+function getStoragePath ( ref: firestore.Ref ): string {
+    return `${ ref.firestore.app.options.projectId }/${ ref.path }`
+        .replaceAll( '/', '.' )
+        .replaceAll( ' ', '_' )
+}
+
 function getStorageKey ( ref: firestore.Ref, suffix: string = '' ): string {
     const ext = getExeCtx() == 'node' ? '.json' : ''
+    const path = getStoragePath( ref )
     suffix = suffix ? `.${ suffix }` : ''
-    return `${ ref.firestore.app.options.projectId }/${ ref.path }${ suffix }${ ext }`
+    return `${ path }${ suffix }${ ext }`
         .replaceAll( '/', '.' )
         .replaceAll( ' ', '_' )
 }
@@ -26,12 +33,14 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     documentSchema,
     modifiedAtPropPath = 'freerstore.modifiedAt',
     modifiedAtPropType = 'isoString',
+    serverWriteDelayMs = 2000,
 }: {
     firebaseApp: FirebaseApp,
     collectionName: string,
     documentSchema: DocSchema,
     modifiedAtPropPath?: string,
     modifiedAtPropType?: 'isoString' | 'date',
+    serverWriteDelayMs?: number,
 } ) {
     type DocData = z.infer<DocSchema>
 
@@ -79,34 +88,44 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     }
 
     async function writeDoc ( docRef: firestore.DocumentReference, docData: DocData ) {
-        storage.setItem( getStorageKey( docRef ), docData )
+        // setDocInStorage( docRef, docData )
         await firestore.setDoc( docRef, docData )
         firestoreStats.incrementWrites()
     }
 
-    function validateDocs ( record: Record<string, DocData> = {} ) {
-        const results = new Map(
-            Object.entries( record ).map( ( [ id, value ] ) => [
-                id,
-                freerstoreDocSchema.safeParse( value )
-            ] )
-        )
-        return results
+    function setDocInStorage ( docRef: firestore.DocumentReference, docData: DocData ) {
+        storage.setItem( getStorageKey( docRef ), docData )
     }
 
-    const docsQueue = new Map<string, DocData>()
-    const commitDocsQueue = debounce(
-        200,
+    function getIdFromStoragePath ( path: string ): string {
+        return path.split( collectionRef.path )[ 1 ].split( '.' )[ 1 ]
+    }
+
+    const commitPendingWriteItems = debounce(
+        serverWriteDelayMs,
         async () => {
+            const pendingWriteItems = storage.filter( ( path, data ) =>
+                path.startsWith( getStoragePath( collectionRef ) ) &&
+                z.object( {
+                    [ modifiedAtTopLevelKey ]: z.object( {
+                        pendingWriteToServer: z.literal( true ),
+                    } ),
+                } ).safeParse( data ).success
+            )
+
+            const docsQueue = Array.from( pendingWriteItems ).map( ( [ path, data ] ) => [
+                getIdFromStoragePath( path ),
+                freerstoreDocSchema.safeParse( data )
+            ] ) as [ string, z.SafeParseReturnType<DocData, DocData> ][]
+
             const batch = firestore.writeBatch( firestoreDB )
-            docsQueue.forEach( ( docData, id ) => {
-                batch.set(
+            docsQueue.forEach( ( [ id, docResult ] ) => {
+                if ( docResult.success ) batch.set(
                     firestore.doc( collectionRef, id ),
-                    docData
+                    docResult.data
                 )
             } )
 
-            docsQueue.clear()
             await batch.commit()
         }
     )
@@ -121,23 +140,50 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             return result
         },
         async setDocs ( record: Record<string, DocData> = {} ) {
-            const results = validateDocs( record )
+            type Result = {
+                success: boolean,
+                data?: DocData,
+                error?: {
+                    issues: {
+                        message: string
+                    }[]
+                },
+            }
 
-            results.forEach( ( result, id ) => {
-                if ( result.success ) {
-                    const keys = new Set( Object.keys( result.data ) )
-                    keys.delete( modifiedAtTopLevelKey )
-                    if ( keys.size > 0 ) {
-                        docsQueue.set( id, result.data )
+            const results = new Map<string, Result>(
+                Object.entries( record ).map( ( [ id, value ] ) => {
+                    const result = freerstoreDocSchema.safeParse( value )
+                    if ( result.success ) {
+                        const keys = new Set( Object.keys( result.data ) )
+                        keys.delete( modifiedAtTopLevelKey )
+                        if ( keys.size > 0 ) {
+                            setDocInStorage(
+                                firestore.doc( collectionRef, id ),
+                                {
+                                    ...result.data,
+                                    [ modifiedAtTopLevelKey ]: {
+                                        ...result.data[ modifiedAtTopLevelKey ],
+                                        pendingWriteToServer: true,
+                                    },
+                                }
+                            )
+                        } else {
+                            const dataString = JSON.stringify( record[ id ] )
+                            const message = `data is empty: ${ id }: ${ dataString }`
+                            return [ id, {
+                                success: false,
+                                error: { issues: [ { message } ] }
+                            } ]
+                        }
                     } else {
-                        console.error( 'TODO Error' )
+                        // TODO perhaps do something with the errors
                     }
-                } else {
-                    // TODO perhaps do something with the errors
-                }
-            } )
+                    return [ id, result ]
+                } )
+            )
 
-            commitDocsQueue()
+            // console.dir( { results }, { depth: Infinity } )
+            commitPendingWriteItems()
             return results
         },
 
