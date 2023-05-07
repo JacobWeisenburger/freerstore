@@ -1,6 +1,6 @@
 import { stringify } from './stringify.js'
 
-export module storage {
+export module kvStorage {
     export function getItem ( key: string ): unknown {
         const persistedValue = localStorage.getItem( key )
         const value = persistedValue == 'undefined' ? null : persistedValue

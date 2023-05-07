@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { FirebaseApp } from 'firebase/app'
-import { storage } from './storage.js'
+import { kvStorage } from './storage.js'
 import { getExeCtx } from './getExeCtx.js'
 import { firestoreStats } from './firestoreStats.js'
 import { makeLastSync } from './makeLastSync.js'
@@ -80,7 +80,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         docSnap: firestore.QueryDocumentSnapshot<DocData>
     ) {
         const result = freerstoreDocSchema.safeParse( docSnap.data() )
-        if ( result.success ) storage.setItem(
+        if ( result.success ) kvStorage.setItem(
             getStorageKey( firestore.doc( collectionRef, docSnap.id ) ),
             result.data
         )
@@ -94,7 +94,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     }
 
     function setDocInStorage ( docRef: firestore.DocumentReference, docData: DocData ) {
-        storage.setItem( getStorageKey( docRef ), docData )
+        kvStorage.setItem( getStorageKey( docRef ), docData )
     }
 
     function getIdFromStoragePath ( path: string ): string {
@@ -104,7 +104,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     const commitPendingWriteItems = debounce(
         serverWriteDelayMs,
         async () => {
-            const pendingWriteItems = storage.filter( ( path, data ) =>
+            const pendingWriteItems = kvStorage.filter( ( path, data ) =>
                 path.startsWith( getStoragePath( collectionRef ) ) &&
                 z.object( {
                     [ modifiedAtTopLevelKey ]: z.object( {

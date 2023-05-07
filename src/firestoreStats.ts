@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { logResult } from './logResult.js'
-import { storage } from './storage.js'
+import { kvStorage } from './storage.js'
 
 function getStorageKey ( date: Date = new Date ): string {
     const [ plainDateString ] = date.toISOString().split( 'T' )
@@ -20,14 +20,14 @@ export module firestoreStats {
     }
 
     export function get ( key: string = getStorageKey() ) {
-        return schema.safeParse( storage.getItem( key ) ?? { reads: 0, writes: 0 } )
+        return schema.safeParse( kvStorage.getItem( key ) ?? { reads: 0, writes: 0 } )
     }
     export function incrementReads ( amount: number = 1 ) {
         const key = getStorageKey()
         const statsResult = get()
         if ( statsResult.success ) {
             const stats = statsResult.data
-            storage.setItem( key, {
+            kvStorage.setItem( key, {
                 ...stats,
                 reads: ( stats.reads ?? 0 ) + amount,
             } )
@@ -38,7 +38,7 @@ export module firestoreStats {
         const statsResult = get()
         if ( statsResult.success ) {
             const stats = statsResult.data
-            storage.setItem( key, {
+            kvStorage.setItem( key, {
                 ...stats,
                 writes: ( stats.writes ?? 0 ) + 1,
             } )

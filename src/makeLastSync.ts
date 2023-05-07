@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { firestore } from './firestore/index.js'
-import { storage } from './storage.js'
+import { kvStorage } from './storage.js'
 
 export type LastSyncProps = {
     storageKey: string
@@ -14,7 +14,7 @@ export function makeLastSync ( {
     const lastSync = {
         storageKey,
         get () {
-            const persistedLastSync = storage.getItem( lastSync.storageKey )
+            const persistedLastSync = kvStorage.getItem( lastSync.storageKey )
             // console.log( lastSync.storageKey )
             // console.log( 'get', persistedLastSync )
 
@@ -26,7 +26,7 @@ export function makeLastSync ( {
         },
         set ( date: Date = new Date() ) {
             // console.log( 'set', date.toISOString() )
-            storage.setItem( lastSync.storageKey, date.toISOString() )
+            kvStorage.setItem( lastSync.storageKey, date.toISOString() )
         },
     }
 
