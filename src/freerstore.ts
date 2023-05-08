@@ -1,31 +1,32 @@
 import { z } from 'zod'
 import { FirebaseApp } from 'firebase/app'
-import { kvStorage } from './storage.js'
-import { getExeCtx } from './getExeCtx.js'
-import { firestoreStats } from './firestoreStats.js'
-import { makeLastSync } from './makeLastSync.js'
-import { firestore } from './firestore/index.js'
-import { debounce } from './debounce.js'
+// import { kvStorage } from './kvStorage'
+import { getExeCtx } from './getExeCtx'
+import { firestoreStats } from './firestoreStats'
+import { makeLastSync } from './makeLastSync'
+import { firestore } from './firestore/index'
+import { debounce } from './debounce'
+import { ModifiedAtPropType } from './types'
 
 export type Result<DocData extends Record<string, unknown>> =
     z.SafeParseReturnType<DocData, DocData>
 
 export type ResultsMap<DocData extends Record<string, unknown>> = Map<string, Result<DocData>>
 
-function getStoragePath ( ref: firestore.Ref ): string {
-    return `${ ref.firestore.app.options.projectId }/${ ref.path }`
-        .replaceAll( '/', '.' )
-        .replaceAll( ' ', '_' )
-}
+// function getStoragePath ( ref: firestore.Ref ): string {
+//     return `${ ref.firestore.app.options.projectId }/${ ref.path }`
+//         .replaceAll( '/', '.' )
+//         .replaceAll( ' ', '_' )
+// }
 
-function getStorageKey ( ref: firestore.Ref, suffix: string = '' ): string {
-    const ext = getExeCtx() == 'node' ? '.json' : ''
-    const path = getStoragePath( ref )
-    suffix = suffix ? `.${ suffix }` : ''
-    return `${ path }${ suffix }${ ext }`
-        .replaceAll( '/', '.' )
-        .replaceAll( ' ', '_' )
-}
+// function getStorageKey ( ref: firestore.Ref, suffix: string = '' ): string {
+//     const ext = getExeCtx() == 'node' ? '.json' : ''
+//     const path = getStoragePath( ref )
+//     suffix = suffix ? `.${ suffix }` : ''
+//     return `${ path }${ suffix }${ ext }`
+//         .replaceAll( '/', '.' )
+//         .replaceAll( ' ', '_' )
+// }
 
 export function getCollection<DocSchema extends z.AnyZodObject> ( {
     firebaseApp,
@@ -39,7 +40,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     collectionName: string,
     documentSchema: DocSchema,
     modifiedAtPropPath?: string,
-    modifiedAtPropType?: 'isoString' | 'date',
+    modifiedAtPropType?: ModifiedAtPropType,
     serverWriteDelayMs?: number,
 } ) {
     type DocData = z.infer<DocSchema>
@@ -52,14 +53,10 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
 
     const [ modifiedAtTopLevelKey ] = modifiedAtPropPath.split( '.' )
 
-    const modifiedAtPropSchema = {
-        isoString: firestore.isoStringSchema,
-        date: firestore.dateSchema,
-    }[ modifiedAtPropType ]
-
     const lastSync = makeLastSync( {
-        storageKey: getStorageKey( collectionRef, 'lastSync' ),
-        schema: modifiedAtPropSchema,
+        // storageKey: 'lastSync',
+        // storageKey: getStorageKey( collectionRef, 'lastSync' ),
+        modifiedAtPropType,
     } )
 
     const freerstoreDocSchema = documentSchema.transform( docData => {
@@ -201,19 +198,24 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
                 if ( snap.empty ) return
 
                 firestoreStats.incrementReads( snap.size )
-                handler( new Map(
-                    snap.docs.map( docSnap => [
-                        docSnap.id,
-                        handleQueryDocumentSnapshot( docSnap )
-                    ] )
-                ) )
+                handler(
+                    new Map(
+                        snap.docs.map( docSnap => [
+                            docSnap.id,
+                            handleQueryDocumentSnapshot( docSnap )
+                        ] )
+                    )
+                )
                 initOnSnapshot()
             }
 
-            const initQuery = () => firestore.query(
-                collectionRef,
-                firestore.where( modifiedAtPropPath, '>', lastSync.get() )
-            )
+            const initQuery = async () => {
+                const lastSyncValue = await lastSync.get()
+                return firestore.query(
+                    collectionRef,
+                    firestore.where( modifiedAtPropPath, '>', lastSync.get() )
+                )
+            }
 
             const initOnSnapshot = () => {
                 unsubscribe()

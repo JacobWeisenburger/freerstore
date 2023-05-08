@@ -1,13 +1,13 @@
 import { z } from 'zod'
-import { logResult } from './logResult.js'
-import { kvStorage } from './storage.js'
+import { logResult } from './logResult'
+// import { kvStorage } from './storage'
 
-function getStorageKey ( date: Date = new Date ): string {
-    const [ plainDateString ] = date.toISOString().split( 'T' )
-    return `firestoreStats.${ plainDateString }.json`
-        .replaceAll( '/', '.' )
-        .replaceAll( ' ', '_' )
-}
+// function getStorageKey ( date: Date = new Date ): string {
+//     const [ plainDateString ] = date.toISOString().split( 'T' )
+//     return `firestoreStats.${ plainDateString }.json`
+//         .replaceAll( '/', '.' )
+//         .replaceAll( ' ', '_' )
+// }
 
 export module firestoreStats {
     const schema = z.object( {

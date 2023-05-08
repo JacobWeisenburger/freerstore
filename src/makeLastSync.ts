@@ -1,32 +1,48 @@
 import { z } from 'zod'
-import { firestore } from './firestore/index.js'
-import { kvStorage } from './storage.js'
+import { firestore } from './firestore'
+import { LocalDB } from './LocalDB'
+import { ModifiedAtPropType } from './types'
 
-export type LastSyncProps = {
-    storageKey: string
-    schema?: z.Schema
+export type LastSyncProps<Type extends ModifiedAtPropType = 'isoString'> = {
+    dbName: string
+    storeName: string
+    modifiedAtPropType?: Type
 }
 
-export function makeLastSync ( {
-    storageKey,
-    schema = firestore.isoStringSchema,
-}: LastSyncProps ) {
-    const lastSync = {
-        storageKey,
-        get () {
-            const persistedLastSync = kvStorage.getItem( lastSync.storageKey )
-            // console.log( lastSync.storageKey )
-            // console.log( 'get', persistedLastSync )
+export function makeLastSync<Type extends ModifiedAtPropType = 'isoString'> ( {
+    dbName,
+    storeName,
+    modifiedAtPropType,
+}: LastSyncProps<Type> ) {
+    const type = modifiedAtPropType ?? 'isoString' as Type
 
-            const parsedPersistedLastSync = schema.safeParse( persistedLastSync )
-            // console.log( parsedPersistedLastSync )
-            return parsedPersistedLastSync.success
-                ? parsedPersistedLastSync.data
-                : new Date( 0 ).toISOString()
-        },
+    const schema = {
+        isoString: firestore.isoStringSchema,
+        date: firestore.dateSchema,
+    }[ type ]
+
+    type Value = z.infer<typeof schema>
+
+    const store = LocalDB.db( dbName ).syncStore( storeName, schema )
+
+    const getValue = ( date: Date ): Value =>
+        ( { date, isoString: date.toISOString() }[ type ] )
+
+    const defaultLastSync = getValue( new Date( 0 ) )
+
+    const storageKey = 'lastSync'
+
+    const lastSync = {
+        defaultLastSync,
         set ( date: Date = new Date() ) {
-            // console.log( 'set', date.toISOString() )
-            kvStorage.setItem( lastSync.storageKey, date.toISOString() )
+            store.set( storageKey, getValue( date ) )
+        },
+        get (): Value {
+            const parsed = store.get( storageKey )
+            return parsed.success ? parsed.data : defaultLastSync
+        },
+        remove () {
+            store.remove( storageKey )
         },
     }
 
