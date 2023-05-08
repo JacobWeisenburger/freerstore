@@ -19,8 +19,7 @@
         "dev": "nodemon",
         "dev.cmd": "start cmd /k npm run dev",
         "test": "jest --watch --config=./jest.config.json",
-        "test.cmd": "start cmd /k npm run test",
-        "storage_test": "deno test --watch src/storage_test.ts"
+        "test.cmd": "start cmd /k npm run test"
     },
     "nodemonConfig": {
         "watch": [
@@ -47,5 +46,8 @@
         "nodemon": "^2.0.22",
         "ts-jest": "^29.1.0",
         "ts-node": "^10.9.1"
+    },
+    "dependencies": {
+        "localforage": "^1.10.0"
     }
 }

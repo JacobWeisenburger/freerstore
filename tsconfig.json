@@ -7,7 +7,7 @@
             "ESNext"
         ],
         "esModuleInterop": true,
-        "moduleResolution": "classic",
+        "moduleResolution": "node",
         "module": "ESNext",
         "target": "ESNext",
         "jsx": "preserve",
