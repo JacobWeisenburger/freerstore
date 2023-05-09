@@ -6,15 +6,15 @@ import { ModifiedAtPropType } from './types'
 export type LastSyncProps<Type extends ModifiedAtPropType = 'isoString'> = {
     dbName: string
     storeName: string
-    modifiedAtPropType?: Type
+    modifiedAtType?: Type
 }
 
 export function makeLastSync<Type extends ModifiedAtPropType = 'isoString'> ( {
     dbName,
     storeName,
-    modifiedAtPropType,
+    modifiedAtType,
 }: LastSyncProps<Type> ) {
-    const type = modifiedAtPropType ?? 'isoString' as Type
+    const type = modifiedAtType ?? 'isoString' as Type
 
     const schema = {
         isoString: firestore.isoStringSchema,

@@ -1,44 +1,30 @@
 import localforage from 'localforage'
 import { z } from 'zod'
 import { getExeCtx } from './getExeCtx'
+import { safeParseJSON } from './utils'
 
 // https://localforage.github.io/localForage/
 
 export module LocalDB {
 
-    export type DB = {
-        name: string
-        asyncStore<Schema extends z.Schema> (
-            name: string,
-            schema: Schema,
-        ): AsyncStore<z.input<Schema>, z.output<Schema>>
-        syncStore<Schema extends z.Schema> (
-            name: string,
-            schema: Schema,
-        ): SyncStore<z.input<Schema>, z.output<Schema>>
-    }
-
-    export type AsyncStore<Input, Output> = {
-        name: string
-        set ( key: string, input: Input ): Promise<z.SafeParseReturnType<Input, Output>>
-        get ( key: string ): Promise<z.SafeParseReturnType<Input, Output>>
-        remove ( key: string ): Promise<void>
-    }
-
-    export type SyncStore<Input, Output> = {
-        name: string
-        set ( key: string, input: Input ): z.SafeParseReturnType<Input, Output>
-        get ( key: string ): z.SafeParseReturnType<Input, Output>
-        remove ( key: string ): void
+    type Path = {
+        dbName: string,
+        storeName: string,
+        key: string,
+        ext?: string,
     }
 
     export function db ( name: string ) {
-        const db: DB = {
+        const db = {
             name,
             asyncStore<Schema extends z.Schema> (
                 name: string,
                 schema: Schema,
             ) {
+                type Input = z.input<Schema>
+                type Output = z.output<Schema>
+                type Result = z.SafeParseReturnType<Input, Output>
+
                 const store = localforage.createInstance( {
                     name: db.name,
                     storeName: name,
@@ -47,12 +33,12 @@ export module LocalDB {
 
                 return {
                     name,
-                    async set ( key, input ) {
+                    async set ( key: string, input: Input ) {
                         const parsed = schema.safeParse( input )
                         if ( parsed.success ) await store.setItem( key, parsed.data )
                         return parsed
                     },
-                    async get ( key ) {
+                    async get ( key: string ) {
                         const value = await store.getItem( key )
                         return schema.safeParse( value )
                     },
@@ -65,17 +51,15 @@ export module LocalDB {
                 name: string,
                 schema: Schema,
             ) {
+                type Input = z.input<Schema>
+                type Output = z.output<Schema>
+                type Result = z.SafeParseReturnType<Input, Output>
+
                 function stringify ( data: any ) {
                     const spaces = getExeCtx() == 'node' ? 4 : 0
                     return JSON.stringify( data, null, spaces )
                 }
 
-                type Path = {
-                    dbName: string,
-                    storeName: string,
-                    key: string,
-                    ext?: string,
-                }
                 const delimiter = getExeCtx() == 'node' ? '~' : '/'
                 function pathToString ( path: Path ): string {
                     const { dbName, storeName, key, ext } = path
@@ -85,36 +69,67 @@ export module LocalDB {
                     ].filter( Boolean ).join( '.' )
                 }
 
-                const pathFromKey = ( key: string ) => pathToString( {
-                    dbName: db.name,
-                    storeName: name,
-                    key,
-                    ext: getExeCtx() == 'node' ? 'json' : undefined,
-                } )
+                function pathStringFromKey ( key: string ): string {
+                    return pathToString( {
+                        dbName: db.name,
+                        storeName: name,
+                        key,
+                        ext: getExeCtx() == 'node' ? 'json' : undefined,
+                    } )
+                }
+
+                function get ( key: string ): Result {
+                    const pathString = pathStringFromKey( key )
+                    const persistedValue = localStorage.getItem( pathString )
+                    const value = persistedValue == 'undefined' ? null : persistedValue
+                    const parsed = schema.safeParse( safeParseJSON( value ?? 'null' ) )
+                    return parsed
+                }
+
+                function parsePath ( x: unknown ) {
+                    return z.string()
+                        .transform( x => x.split( delimiter ) )
+                        .pipe( z.string().array().length( 3 ) )
+                        .transform( ( [ dbName, storeName, keyAndExt ] ): Path => {
+                            const [ key, ext ] = keyAndExt.split( '.' )
+                            return { dbName, storeName, key, ext }
+                        } ).safeParse( x )
+                }
+
+                function getAll (): Map<string, Result> {
+                    const map = new Map()
+                    for ( let i = 0; i < localStorage.length; i++ ) {
+                        const pathString = localStorage.key( i )
+
+                        const parsedPath = parsePath( pathString )
+                        if ( !parsedPath.success ) continue
+
+                        const { dbName, storeName, key } = parsedPath.data
+                        if ( !( db.name == dbName && name == storeName ) ) continue
+
+                        const result = pathString ? get( key ) : undefined
+                        if ( pathString && result ) map.set( key, result )
+                    }
+                    return map
+                }
 
                 return {
                     name,
-                    set ( key, input ) {
-                        const path = pathFromKey( key )
+                    get,
+                    getAll,
+                    pathStringFromKey,
+                    parsePath,
+                    set ( key: string, input: Input ) {
+                        const pathString = pathStringFromKey( key )
                         const parsed = schema.safeParse( input )
                         if ( parsed.success ) {
-                            localStorage.setItem(
-                                path,
-                                stringify( parsed.data )
-                            )
+                            localStorage.setItem( pathString, stringify( parsed.data ) )
                         }
                         return parsed
                     },
-                    get ( key ) {
-                        const path = pathFromKey( key )
-                        const persistedValue = localStorage.getItem( path )
-                        const value = persistedValue == 'undefined' ? null : persistedValue
-                        const parsed = schema.safeParse( safeParseJSON( value ?? 'null' ) )
-                        return parsed
-                    },
                     remove ( key: string ) {
-                        const path = pathFromKey( key )
-                        localStorage.removeItem( path )
+                        const pathString = pathStringFromKey( key )
+                        localStorage.removeItem( pathString )
                     },
                 }
             }
@@ -124,25 +139,3 @@ export module LocalDB {
     }
 
 }
-
-function safeParseJSON ( data: string ) {
-    try {
-        return JSON.parse( data )
-    } catch ( error ) {
-        return data
-    }
-}
-
-// function filter ( cb: ( key: string, data: unknown ) => boolean ) {
-//     return Array.from( getAllItems() ).filter( ( [ key, data ] ) => cb( key, data ) )
-// }
-
-// function getAllItems () {
-//     const map = new Map<string, unknown>()
-//     for ( let i = 0; i < localStorage.length; i++ ) {
-//         const key = localStorage.key( i )
-//         const data = key ? LocalKV.getItem( key ) : undefined
-//         if ( key && data ) map.set( key, data )
-//     }
-//     return map
-// }

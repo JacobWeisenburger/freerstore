@@ -1,13 +1,9 @@
 import { z } from 'zod'
 import { FirebaseApp } from 'firebase/app'
-// import { kvStorage } from './kvStorage'
-import { getExeCtx } from './getExeCtx'
-// import { firestoreStats } from './firestoreStats'
 import { makeLastSync } from './makeLastSync'
 import { firestore } from './firestore/index'
 import { debounce } from './debounce'
 import { ModifiedAtPropType } from './types'
-import { connectFirestoreEmulator } from 'firebase/firestore'
 import { LocalDB } from './LocalDB'
 
 export type Result<DocData extends Record<string, unknown>> =
@@ -15,34 +11,21 @@ export type Result<DocData extends Record<string, unknown>> =
 
 export type ResultsMap<DocData extends Record<string, unknown>> = Map<string, Result<DocData>>
 
-// function getStoragePath ( ref: firestore.Ref ): string {
-//     return `${ ref.firestore.app.options.projectId }/${ ref.path }`
-//         .replaceAll( '/', '.' )
-//         .replaceAll( ' ', '_' )
-// }
-
-// function getStorageKey ( ref: firestore.Ref, suffix: string = '' ): string {
-//     const ext = getExeCtx() == 'node' ? '.json' : ''
-//     const path = getStoragePath( ref )
-//     suffix = suffix ? `.${ suffix }` : ''
-//     return `${ path }${ suffix }${ ext }`
-//         .replaceAll( '/', '.' )
-//         .replaceAll( ' ', '_' )
-// }
-
 export async function getCollection<DocSchema extends z.AnyZodObject> ( {
     firebaseApp,
     collectionName,
     documentSchema,
-    modifiedAtPropPath = 'freerstore.modifiedAt',
-    modifiedAtPropType = 'isoString',
+    freerstoreSectionKey = 'freerstore',
+    modifiedAtKey = 'modifiedAt',
+    modifiedAtType = 'isoString',
     serverWriteDelayMs = 2000,
 }: {
     firebaseApp: FirebaseApp,
     collectionName: string,
     documentSchema: DocSchema,
-    modifiedAtPropPath?: string,
-    modifiedAtPropType?: ModifiedAtPropType,
+    freerstoreSectionKey?: string,
+    modifiedAtKey?: string,
+    modifiedAtType?: ModifiedAtPropType,
     serverWriteDelayMs?: number,
 } ) {
     type DocData = z.infer<DocSchema>
@@ -54,28 +37,35 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
         firestoreDB, collectionName
     ) as firestore.CollectionReference<DocData>
 
-    const [ modifiedAtTopLevelKey ] = modifiedAtPropPath.split( '.' )
+    const modifiedAtPropPath = [ freerstoreSectionKey, modifiedAtKey ].join( '.' )
 
     const lastSync = makeLastSync( {
         dbName: firebaseApp.options.projectId,
         storeName: collectionName,
-        modifiedAtPropType,
+        modifiedAtType,
     } )
 
-    const freerstoreDocSchema = documentSchema.transform( docData => {
-        const value = {
-            isoString: new Date().toISOString(),
-            date: new Date(),
-        }[ modifiedAtPropType ]
+    const freerstoreDocSchema = z.union( [
+        documentSchema.extend( {
+            [ freerstoreSectionKey ]: z.object( {
+                pendingWriteToServer: z.literal( true ).optional(),
+                [ modifiedAtKey ]: {
+                    isoString: firestore.isoStringSchema,
+                    date: firestore.dateSchema,
+                }[ modifiedAtType ]
+            } ),
+        } ),
+        documentSchema.transform( docData => {
+            docData[ freerstoreSectionKey ] = docData[ freerstoreSectionKey ] ?? {}
+            docData[ freerstoreSectionKey ][ modifiedAtKey ] = {
+                isoString: new Date().toISOString(),
+                date: new Date(),
+            }[ modifiedAtType ]
+            return docData
+        } ),
+    ] )
 
-        const modifiedAtPropTree = modifiedAtPropPath
-            .split( '.' )
-            .reverse()
-            .reduce( ( value, key ) => ( { [ key ]: value } ), value as object )
-
-        return { ...docData, ...modifiedAtPropTree }
-    } )
-
+    // TODO use asyncStore instead of syncStore
     // const asyncStore = LocalDB
     //     .db( firebaseApp.options.projectId )
     //     .asyncStore( collectionName, freerstoreDocSchema )
@@ -84,62 +74,38 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
         .db( firebaseApp.options.projectId )
         .syncStore( collectionName, freerstoreDocSchema )
 
-    // const result = freerstoreDocSchema.safeParse( { foo: 'bar' } )
-    // if ( result.success ) {
-    //     syncStore.set( 'docSnap.id', result.data )
-    //     console.log( syncStore.get( 'docSnap.id' ) )
-    // }
-
-    function handleQueryDocumentSnapshot ( docSnap: firestore.QueryDocumentSnapshot<DocData> ) {
-        const result = freerstoreDocSchema.safeParse( docSnap.data() )
-        if ( result.success ) syncStore.set( docSnap.id, result.data )
-        return result
-    }
-
-    async function writeDoc ( docRef: firestore.DocumentReference, docData: DocData ) {
-        // setDocInStorage( docRef, docData )
-        await firestore.setDoc( docRef, docData )
-        // firestoreStats.incrementWrites()
-    }
-
-    function setDocInStorage ( docRef: firestore.DocumentReference, docData: DocData ) {
-        syncStore.set( docRef.id, docData )
-    }
-
-    // function getIdFromStoragePath ( path: string ): string {
-    //     return path.split( collectionRef.path )[ 1 ].split( '.' )[ 1 ]
-    // }
-
     const commitPendingWriteItems = debounce(
         serverWriteDelayMs,
         async () => {
-            console.log( 'commitPendingWriteItems' )
+            type Data = z.infer<typeof freerstoreDocSchema>
 
-            // const pendingWriteItems = kvStorage.filter( ( path, data ) =>
-            //     path.startsWith( getStoragePath( collectionRef ) ) &&
-            //     z.object( {
-            //         [ modifiedAtTopLevelKey ]: z.object( {
-            //             pendingWriteToServer: z.literal( true ),
-            //         } ),
-            //     } ).safeParse( data ).success
-            // )
+            const pendingWriteItems = Array.from( syncStore.getAll() )
+                .reduce( ( map, [ key, result ] ) => {
+                    if (
+                        result.success &&
+                        result.data[ freerstoreSectionKey ].pendingWriteToServer
+                    ) {
+                        delete result.data[ freerstoreSectionKey ].pendingWriteToServer
+                        map.set( key, result.data )
+                    }
+                    return map
+                }, new Map<string, Data>() )
 
-            // const docsQueue = Array.from( pendingWriteItems ).map( ( [ path, data ] ) => [
-            //     getIdFromStoragePath( path ),
-            //     freerstoreDocSchema.safeParse( data )
-            // ] ) as [ string, z.SafeParseReturnType<DocData, DocData> ][]
+            if ( pendingWriteItems.size == 0 ) return
 
-            // const batch = firestore.writeBatch( firestoreDB )
-            // docsQueue.forEach( ( [ id, docResult ] ) => {
-            //     if ( docResult.success ) batch.set(
-            //         firestore.doc( collectionRef, id ),
-            //         docResult.data
-            //     )
-            // } )
+            // TODO handle this case
+            if ( pendingWriteItems.size > 100 ) throw new Error( 'Too many pending write items' )
 
-            // await batch.commit()
+            const batch = firestore.writeBatch( firestoreDB )
+            pendingWriteItems.forEach( ( data, id ) => {
+                batch.set( firestore.doc( collectionRef, id ), data )
+            } )
+            await batch.commit()
         }
     )
+
+    // TODO deal with committing pending writes after a long time being offline
+    // commitPendingWriteItems()
 
     type ParseResult = {
         success: boolean,
@@ -151,22 +117,17 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
         },
     }
 
-    // TODO Name this better
-    function blah ( id: string, docData: DocData ): [ string, ParseResult ] {
+    function localSave ( id: string, docData: DocData ): [ string, ParseResult ] {
         const result = freerstoreDocSchema.safeParse( docData )
+
         if ( result.success ) {
             const keys = new Set( Object.keys( result.data ) )
-            keys.delete( modifiedAtTopLevelKey )
+            keys.delete( freerstoreSectionKey )
             if ( keys.size > 0 ) {
-                setDocInStorage(
-                    firestore.doc( collectionRef, id ),
-                    {
-                        ...result.data,
-                        [ modifiedAtTopLevelKey ]: {
-                            ...result.data[ modifiedAtTopLevelKey ],
-                            pendingWriteToServer: true,
-                        },
-                    }
+                result.data[ freerstoreSectionKey ].pendingWriteToServer = true
+                syncStore.set(
+                    firestore.doc( collectionRef, id ).id,
+                    result.data
                 )
             } else {
                 const dataString = JSON.stringify( docData )
@@ -177,29 +138,29 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
                 } ]
             }
         } else {
-            // TODO perhaps do something with the errors
+            if ( !result.success ) console.error( result.error?.issues )
         }
         return [ id, result ]
     }
 
     return {
-        setDoc ( id: string, docData: DocData ): ParseResult {
-            const [ , result ] = blah( id, docData )
+        serverWriteDelayMs,
+        setDoc ( id: string, docData: DocData ): [ string, ParseResult ] {
+            const [ , result ] = localSave( id, docData )
 
             commitPendingWriteItems()
-            return result
+            return [ id, result ]
         },
-        async setDocs ( record: Record<string, DocData> = {} ) {
-            const results = new Map(
-                Object.entries( record ).map( ( [ id, docData ] ) => blah( id, docData ) )
+        setDocs ( record: Record<string, DocData> = {} ) {
+            return new Map(
+                Object.entries( record )
+                    .map( ( [ id, docData ] ) => this.setDoc( id, docData ) )
             )
-
-            // console.dir( { results }, { depth: Infinity } )
-            commitPendingWriteItems()
-            return results
         },
 
-        onSnapshot ( handler: ( map: ResultsMap<DocData> ) => void ): firestore.Unsubscribe {
+        onSnapshot (
+            handler: ( map: ResultsMap<DocData> ) => void = () => { }
+        ): firestore.Unsubscribe {
             /* 
             Restart onSnapshot with new lastSync.get() after each batch.
             This prevents docs that were changed after lastSync from
@@ -212,15 +173,14 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
                 lastSync.set()
                 if ( snap.empty ) return
 
-                // firestoreStats.incrementReads( snap.size )
-                handler(
-                    new Map(
-                        snap.docs.map( docSnap => [
-                            docSnap.id,
-                            handleQueryDocumentSnapshot( docSnap )
-                        ] )
-                    )
+                const resultsMap = new Map(
+                    snap.docs.map( docSnap => {
+                        const result = freerstoreDocSchema.safeParse( docSnap.data() )
+                        if ( result.success ) syncStore.set( docSnap.id, result.data )
+                        return [ docSnap.id, result ]
+                    } )
                 )
+                handler( resultsMap )
                 initOnSnapshot()
             }
 

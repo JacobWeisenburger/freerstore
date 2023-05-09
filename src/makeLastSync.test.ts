@@ -20,7 +20,7 @@ describe( 'makeLastSync', () => {
         const storeName = 'test-store-isoString'
         const lastSync = makeLastSync( {
             dbName, storeName,
-            modifiedAtPropType: 'isoString',
+            modifiedAtType: 'isoString',
         } )
 
         lastSync.set( date )
@@ -34,7 +34,7 @@ describe( 'makeLastSync', () => {
         const storeName = 'test-store-date'
         const lastSync = makeLastSync( {
             dbName, storeName,
-            modifiedAtPropType: 'date',
+            modifiedAtType: 'date',
         } )
 
         lastSync.set( date )

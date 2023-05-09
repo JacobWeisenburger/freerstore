@@ -3,13 +3,12 @@ import './initLocalStorage/index.cjs'
 
 import { z } from 'zod'
 import { initializeApp } from 'firebase/app'
-import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, setDoc } from 'firebase/firestore'
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 import { freerstore } from '.'
+import { logDeep, wait } from './utils'
 
 // https://console.firebase.google.com/u/0/project/freerstore-tests/firestore/data/~2Ftest~2FICpPGmgAYFR3X7b5w6xJ
 // https://console.firebase.google.com/u/0/project/royal-drive-dms-dev-987123654/firestore/data/~2Fcars~2F11111111111111111
-
-// it.skip( ``, () => { } )
 
 describe( 'freerstore', () => {
 
@@ -17,49 +16,45 @@ describe( 'freerstore', () => {
     const firestoreDB = getFirestore( firebaseApp )
     connectFirestoreEmulator( firestoreDB, 'localhost', 9000 )
 
-    // setDoc( doc( firestoreDB, 'test', 'docId1' ), { foo: 'docId1' } )
-    // setDoc( doc( firestoreDB, 'test', 'docId2' ), { foo: 'docId2' } )
-    // const docsSnap = await getDocs( collection( firestoreDB, 'test' ) )
-    // console.log( docsSnap.docs.map( x => [ x.id, x.data() ] ) )
-
-    it( `Freerstore Tests`, async () => {
+    it( `Freerstore Defaults`, async () => {
         const collection = await freerstore.getCollection( {
             firebaseApp,
             collectionName: 'test',
             documentSchema: z.object( { foo: z.string() } ),
         } )
 
-        collection.setDoc( 'docId1', { foo: 'docId1' } )
-        collection.setDocs( {
-            docId2: { foo: 'docId2' },
-            docId3: { foo: 'docId3' },
-        } )
+        const unsub = collection.onSnapshot( logDeep )
+
+        // collection.setDocs( {
+        //     docId1: { foo: 'docId1' },
+        //     docId2: { foo: 'docId2' },
+        //     docId3: { foo: 'docId3' },
+        // } )
+
+        await wait( collection.serverWriteDelayMs + 1000 )
+        unsub()
     } )
 
-    // it( `Royal Drive DMS Dev`, async () => {
+    it( `Freerstore Cars`, async () => {
+        const collection = await freerstore.getCollection( {
+            firebaseApp,
+            collectionName: 'cars',
+            documentSchema: z.object( { vin: z.string() } ).passthrough(),
+            freerstoreSectionKey: 'metadata',
+            modifiedAtKey: 'modified',
+            modifiedAtType: 'date',
+            serverWriteDelayMs: 2000,
+        } )
 
-    //     const firebaseConfig = {
-    //         // apiKey: 'AIzaSyDL4T7Ct0VtsN3s69zwODsU0pd5gnPmgnE',
-    //         // authDomain: 'royal-drive-dms-dev-987123654.firebaseapp.com',
-    //         // databaseURL: 'https://royal-drive-dms-dev-987123654.firebaseio.com',
-    //         projectId: 'royal-drive-dms-dev-987123654',
-    //         // storageBucket: 'royal-drive-dms-dev-987123654.appspot.com',
-    //         // messagingSenderId: '68222877311',
-    //         // appId: '1:68222877311:web:a313c9aa73e4b75d9b894a'
-    //     }
+        const unsub = collection.onSnapshot( logDeep )
 
-    //     const firebaseApp = initializeApp( firebaseConfig )
-    //     const collection = freerstore.getCollection( {
-    //         firebaseApp,
-    //         collectionName: 'cars',
-    //         documentSchema: z.object( { vin: z.string() } ).passthrough(),
-    //         modifiedAtPropPath: 'metadata.modified',
-    //         modifiedAtPropType: 'date',
-    //         serverWriteDelayMs: 2000,
-    //     } )
+        // collection.setDocs( {
+        //     '11111111111111111': { vin: '11111111111111111' },
+        //     '12312312312323121': { vin: '12312312312323121' },
+        // } )
 
-    // } )
-
-
+        await wait( collection.serverWriteDelayMs + 1000 )
+        unsub()
+    } )
 
 } )
