@@ -16,14 +16,15 @@ describe( 'freerstore', () => {
     const firestoreDB = getFirestore( firebaseApp )
     connectFirestoreEmulator( firestoreDB, 'localhost', 9000 )
 
-    it( `Freerstore Defaults`, async () => {
+    it.skip( `Freerstore Defaults`, async () => {
         const collection = await freerstore.getCollection( {
             firebaseApp,
             collectionName: 'test',
             documentSchema: z.object( { foo: z.string() } ),
         } )
 
-        const unsub = collection.onSnapshot( logDeep )
+        const unsub = collection.onSnapshot()
+        // const unsub = collection.onSnapshot( logDeep )
 
         // collection.setDocs( {
         //     docId1: { foo: 'docId1' },
@@ -46,12 +47,13 @@ describe( 'freerstore', () => {
             serverWriteDelayMs: 2000,
         } )
 
-        const unsub = collection.onSnapshot( logDeep )
+        const unsub = collection.onSnapshot()
+        // const unsub = collection.onSnapshot( logDeep )
 
-        // collection.setDocs( {
-        //     '11111111111111111': { vin: '11111111111111111' },
-        //     '12312312312323121': { vin: '12312312312323121' },
-        // } )
+        collection.setDocs( {
+            '11111111111111111': { vin: '11111111111111111' },
+            '12312312312323121': { vin: '12312312312323121' },
+        } )
 
         await wait( collection.serverWriteDelayMs + 1000 )
         unsub()

@@ -5,6 +5,7 @@ import { firestore } from './firestore/index'
 import { debounce } from './debounce'
 import { ModifiedAtPropType } from './types'
 import { LocalDB } from './LocalDB'
+import { logDeep } from './utils'
 
 export type Result<DocData extends Record<string, unknown>> =
     z.SafeParseReturnType<DocData, DocData>
@@ -45,6 +46,7 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
         modifiedAtType,
     } )
 
+    type Data = z.infer<typeof freerstoreDocSchema>
     const freerstoreDocSchema = z.union( [
         documentSchema.extend( {
             [ freerstoreSectionKey ]: z.object( {
@@ -65,21 +67,20 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
         } ),
     ] )
 
-    // TODO use asyncStore instead of syncStore
-    // const asyncStore = LocalDB
-    //     .db( firebaseApp.options.projectId )
-    //     .asyncStore( collectionName, freerstoreDocSchema )
-
-    const syncStore = LocalDB
+    const asyncStore = LocalDB
         .db( firebaseApp.options.projectId )
-        .syncStore( collectionName, freerstoreDocSchema )
+        // .syncStore( collectionName, freerstoreDocSchema )
+        .asyncStore( collectionName, freerstoreDocSchema )
 
     const commitPendingWriteItems = debounce(
         serverWriteDelayMs,
         async () => {
-            type Data = z.infer<typeof freerstoreDocSchema>
 
-            const pendingWriteItems = Array.from( syncStore.getAll() )
+            // const allItems = asyncStore.getAll()
+            const allItems = await asyncStore.getAll()
+            // logDeep( allItems )
+
+            const pendingWriteItems = Array.from( allItems )
                 .reduce( ( map, [ key, result ] ) => {
                     if (
                         result.success &&
@@ -91,6 +92,8 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
                     return map
                 }, new Map<string, Data>() )
 
+            // logDeep( pendingWriteItems )
+
             if ( pendingWriteItems.size == 0 ) return
 
             // TODO handle this case
@@ -98,6 +101,15 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
 
             const batch = firestore.writeBatch( firestoreDB )
             pendingWriteItems.forEach( ( data, id ) => {
+                // logDeep( firestore.doc( collectionRef, id ).id )
+                // logDeep( data[ freerstoreSectionKey ][ modifiedAtKey ] )
+                // batch.set( firestore.doc( collectionRef, id ), {
+                //     vin: '11111111111111111',
+                //     metadata: {
+                //         modified: data[ freerstoreSectionKey ][ modifiedAtKey ],
+                //         // modified: new Date(),
+                //     }
+                // } )
                 batch.set( firestore.doc( collectionRef, id ), data )
             } )
             await batch.commit()
@@ -125,7 +137,7 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
             keys.delete( freerstoreSectionKey )
             if ( keys.size > 0 ) {
                 result.data[ freerstoreSectionKey ].pendingWriteToServer = true
-                syncStore.set(
+                asyncStore.set(
                     firestore.doc( collectionRef, id ).id,
                     result.data
                 )
@@ -176,7 +188,7 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
                 const resultsMap = new Map(
                     snap.docs.map( docSnap => {
                         const result = freerstoreDocSchema.safeParse( docSnap.data() )
-                        if ( result.success ) syncStore.set( docSnap.id, result.data )
+                        if ( result.success ) asyncStore.set( docSnap.id, result.data )
                         return [ docSnap.id, result ]
                     } )
                 )

@@ -1,7 +1,7 @@
 import localforage from 'localforage'
 import { z } from 'zod'
 import { getExeCtx } from './getExeCtx'
-import { safeParseJSON } from './utils'
+import { logDeep, safeParseJSON } from './utils'
 
 // https://localforage.github.io/localForage/
 
@@ -31,16 +31,27 @@ export module LocalDB {
                     driver: localforage.INDEXEDDB,
                 } )
 
+                async function get ( key: string ) {
+                    const value = await store.getItem( key )
+                    return schema.safeParse( value )
+                }
+
+                async function getAll () {
+                    const map = new Map<string, Result>()
+                    await store.iterate( ( value, key ) => {
+                        map.set( key, schema.safeParse( value ) )
+                    } )
+                    return map
+                }
+
                 return {
                     name,
+                    getAll,
+                    get,
                     async set ( key: string, input: Input ) {
                         const parsed = schema.safeParse( input )
                         if ( parsed.success ) await store.setItem( key, parsed.data )
                         return parsed
-                    },
-                    async get ( key: string ) {
-                        const value = await store.getItem( key )
-                        return schema.safeParse( value )
                     },
                     async remove ( key: string ) {
                         return store.removeItem( key )
