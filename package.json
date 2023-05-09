@@ -18,6 +18,8 @@
         "start.dev": "node --no-warnings -r ./src/initLocalStorage/index.cjs --loader ts-node/esm --es-module-specifier-resolution=node dev",
         "dev": "nodemon",
         "dev.cmd": "start cmd /k npm run dev",
+        "firebase:emulators": "firebase emulators:start --only firestore",
+        "firebase:emulators.cmd": "start cmd /k npm run firebase:emulators",
         "test": "jest --watch --config=./jest.config.json",
         "test.cmd": "start cmd /k npm run test"
     },

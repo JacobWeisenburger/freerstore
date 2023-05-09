@@ -5,3 +5,4 @@ dev.deno.ts
 dev.html
 tmp
 *.sqlite
+*.log
