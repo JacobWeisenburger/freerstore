@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { firestore } from './firestore'
 import { LocalDB } from './LocalDB'
 import { ModifiedAtPropType } from './types'
+import { logDeep } from './utils'
 
 export type LastSyncProps<Type extends ModifiedAtPropType = 'isoString'> = {
     dbName: string

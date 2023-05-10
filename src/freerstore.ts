@@ -5,16 +5,19 @@ import { firestore } from './firestore/index'
 import { debounce } from './debounce'
 import { ModifiedAtPropType } from './types'
 import { LocalDB } from './LocalDB'
-import { logDeep } from './utils'
+import { deepClone, logDeep, prune } from './utils'
 
 export type Result<DocData extends Record<string, unknown>> =
     z.SafeParseReturnType<DocData, DocData>
 
 export type ResultsMap<DocData extends Record<string, unknown>> = Map<string, Result<DocData>>
 
-export async function getCollection<DocSchema extends z.AnyZodObject> ( {
+export type Collection = ReturnType<typeof getCollection>
+// export type getDocSchema<Coll extends Collection> =
+//     Coll extends typeof getCollection<infer DocSchema> ? DocSchema : never
+export function getCollection<DocSchema extends z.AnyZodObject> ( {
     firebaseApp,
-    collectionName,
+    name,
     documentSchema,
     freerstoreSectionKey = 'freerstore',
     modifiedAtKey = 'modifiedAt',
@@ -22,7 +25,7 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
     serverWriteDelayMs = 2000,
 }: {
     firebaseApp: FirebaseApp,
-    collectionName: string,
+    name: string,
     documentSchema: DocSchema,
     freerstoreSectionKey?: string,
     modifiedAtKey?: string,
@@ -35,14 +38,14 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
     if ( !firebaseApp.options.projectId ) throw new Error( 'Firebase project ID is required' )
 
     const collectionRef = firestore.collection(
-        firestoreDB, collectionName
+        firestoreDB, name
     ) as firestore.CollectionReference<DocData>
 
     const modifiedAtPropPath = [ freerstoreSectionKey, modifiedAtKey ].join( '.' )
 
     const lastSync = makeLastSync( {
         dbName: firebaseApp.options.projectId,
-        storeName: collectionName,
+        storeName: name,
         modifiedAtType,
     } )
 
@@ -69,16 +72,13 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
 
     const asyncStore = LocalDB
         .db( firebaseApp.options.projectId )
-        // .syncStore( collectionName, freerstoreDocSchema )
-        .asyncStore( collectionName, freerstoreDocSchema )
+        .asyncStore( name, freerstoreDocSchema )
 
     const commitPendingWriteItems = debounce(
         serverWriteDelayMs,
         async () => {
 
-            // const allItems = asyncStore.getAll()
             const allItems = await asyncStore.getAll()
-            // logDeep( allItems )
 
             const pendingWriteItems = Array.from( allItems )
                 .reduce( ( map, [ key, result ] ) => {
@@ -92,8 +92,6 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
                     return map
                 }, new Map<string, Data>() )
 
-            // logDeep( pendingWriteItems )
-
             if ( pendingWriteItems.size == 0 ) return
 
             // TODO handle this case
@@ -101,16 +99,17 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
 
             const batch = firestore.writeBatch( firestoreDB )
             pendingWriteItems.forEach( ( data, id ) => {
-                // logDeep( firestore.doc( collectionRef, id ).id )
-                // logDeep( data[ freerstoreSectionKey ][ modifiedAtKey ] )
-                // batch.set( firestore.doc( collectionRef, id ), {
-                //     vin: '11111111111111111',
-                //     metadata: {
-                //         modified: data[ freerstoreSectionKey ][ modifiedAtKey ],
-                //         // modified: new Date(),
-                //     }
-                // } )
-                batch.set( firestore.doc( collectionRef, id ), data )
+                /* 
+                deepClone is needed to fix weird firebase error:
+                FirebaseError: Function WriteBatch.set() called with invalid data. Unsupported field value: a custom Object object (found in field metadata in document cars/11111111111111111)
+                */
+                batch.set(
+                    firestore.doc( collectionRef, id ),
+                    {
+                        date: deepClone( data, { isoString: 'date' } ),
+                        isoString: data,
+                    }[ modifiedAtType ],
+                )
             } )
             await batch.commit()
         }
@@ -156,16 +155,26 @@ export async function getCollection<DocSchema extends z.AnyZodObject> ( {
     }
 
     return {
-        serverWriteDelayMs,
+        _types: {
+            DocData: {} as DocData,
+        },
+        props: {
+            name,
+            documentSchema,
+            freerstoreSectionKey,
+            modifiedAtKey,
+            modifiedAtType,
+            serverWriteDelayMs,
+        },
         setDoc ( id: string, docData: DocData ): [ string, ParseResult ] {
             const [ , result ] = localSave( id, docData )
 
             commitPendingWriteItems()
             return [ id, result ]
         },
-        setDocs ( record: Record<string, DocData> = {} ) {
+        setDocs ( docs: Record<string, DocData> = {} ) {
             return new Map(
-                Object.entries( record )
+                Object.entries( docs )
                     .map( ( [ id, docData ] ) => this.setDoc( id, docData ) )
             )
         },

@@ -15,7 +15,7 @@
         "typescript"
     ],
     "scripts": {
-        "start.dev": "node --no-warnings -r ./src/initLocalStorage/index.cjs --loader ts-node/esm --es-module-specifier-resolution=node dev",
+        "start.dev": "node --no-warnings --loader ts-node/esm --es-module-specifier-resolution=node dev",
         "dev": "nodemon",
         "dev.cmd": "start cmd /k npm run dev",
         "firebase:emulators": "firebase emulators:start --only firestore",
