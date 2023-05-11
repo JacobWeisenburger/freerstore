@@ -20,8 +20,9 @@
         "dev.cmd": "start cmd /k npm run dev",
         "firebase:emulators": "firebase emulators:start --only firestore",
         "firebase:emulators.cmd": "start cmd /k npm run firebase:emulators",
-        "test": "jest --watch --config=./jest.config.json --detectOpenHandles freerstore.test.ts",
-        "test.cmd": "start cmd /k npm run test"
+        "test": "cls && jest --config=./jest.config.json --detectOpenHandles freerstore.test.ts",
+        "test.watch": "npm run test -- --watch",
+        "test.watch.cmd": "start cmd /k npm run test.watch"
     },
     "nodemonConfig": {
         "watch": [

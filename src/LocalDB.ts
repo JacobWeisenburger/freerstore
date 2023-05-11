@@ -39,6 +39,19 @@ export module LocalDB {
                 async function getAll () {
                     const map = new Map<string, Result>()
                     await store.iterate( ( value, key ) => {
+                        //@ts-ignore
+                        const modified = value?.metadata?.modified
+                        const parsed = z.date().safeParse( modified )
+                        logDeep( [
+                            'getAll',
+                            // key,
+                            modified,
+                            modified?.toString(),
+                            modified instanceof Date,
+                            new Date( modified ) instanceof Date,
+                            new Date( modified?.toString() ) instanceof Date,
+                            // parsed.success ? parsed.data : parsed.error.issues,
+                        ] )
                         map.set( key, schema.safeParse( value ) )
                     } )
                     return map
@@ -55,6 +68,22 @@ export module LocalDB {
                     },
                     async remove ( key: string ) {
                         return store.removeItem( key )
+                    },
+
+                    async test () {
+                        // const serializer = await store.getSerializer()
+                        // serializer.serialize( {
+                        //     date: new Date()
+                        // }, serialDate => {
+                        //     logDeep( [
+                        //         'test',
+                        //         serialDate,
+                        //         serializer.deserialize( serialDate ),
+                        //     ] )
+                        // } )
+
+                        // TODO
+                        // some kind of weird thing with serializing/deserializing dates
                     },
                 }
             },
