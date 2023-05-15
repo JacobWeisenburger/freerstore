@@ -21,6 +21,8 @@ const firestoreDB = firestore.getFirestore( firebaseApp )
 firestore.connectFirestoreEmulator( firestoreDB, 'localhost', firestoreEmulatorPort )
 
 async function clearDb () {
+    // https://firebase.google.com/docs/emulator-suite/connect_firestore#clear_your_database_between_tests
+
     const url = `http://localhost:${ firestoreEmulatorPort }/emulator/v1/projects/${ projectId }/databases/(default)/documents`
 
     try {
