@@ -1,6 +1,7 @@
 __*.md
 node_modules
 dev.ts
+dev.test.ts
 dev.deno.ts
 dev.html
 tmp

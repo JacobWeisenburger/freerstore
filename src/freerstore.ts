@@ -5,16 +5,22 @@ import { firestore } from './firestore/index'
 import { debounce } from './debounce'
 import { ModifiedAtPropType } from './types'
 import { LocalDB } from './LocalDB'
-import { deepClone, logDeep, prune } from './utils'
+import { cluster } from 'radash'
 
 export type Result<DocData extends Record<string, unknown>> =
     z.SafeParseReturnType<DocData, DocData>
 
 export type ResultsMap<DocData extends Record<string, unknown>> = Map<string, Result<DocData>>
 
+export type CollectionEventName = typeof collectionEventNames[ number ]
+export const collectionEventNames = [
+    'cacheWriteStart',
+    'cacheWriteEnd',
+    'serverWriteStart',
+    'serverWriteEnd',
+] as const
+
 export type Collection = ReturnType<typeof getCollection>
-// export type getDocSchema<Coll extends Collection> =
-//     Coll extends typeof getCollection<infer DocSchema> ? DocSchema : never
 export function getCollection<DocSchema extends z.AnyZodObject> ( {
     firebaseApp,
     name,
@@ -74,51 +80,38 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         .db( firebaseApp.options.projectId )
         .asyncStore( name, freerstoreDocSchema )
 
-    asyncStore.test()
-
     const commitPendingWriteItems = debounce(
         serverWriteDelayMs,
         async () => {
-            // console.log( 'commitPendingWriteItems' )
+            emit( 'serverWriteStart' )
 
             const allItems = await asyncStore.getAll()
 
-            // logDeep( { allItems } )
+            const pendingWriteItems = Array.from( allItems )
+                .reduce( ( map, [ key, result ] ) => {
+                    if (
+                        result.success &&
+                        result.data[ freerstoreSectionKey ].pendingWriteToServer
+                    ) {
+                        delete result.data[ freerstoreSectionKey ].pendingWriteToServer
+                        map.set( key, result.data )
+                    }
+                    return map
+                }, new Map<string, Data>() )
 
-            // const pendingWriteItems = Array.from( allItems )
-            //     .reduce( ( map, [ key, result ] ) => {
-            //         if (
-            //             result.success &&
-            //             result.data[ freerstoreSectionKey ].pendingWriteToServer
-            //         ) {
-            //             delete result.data[ freerstoreSectionKey ].pendingWriteToServer
-            //             map.set( key, result.data )
-            //         }
-            //         return map
-            //     }, new Map<string, Data>() )
+            const entryGroups = cluster( Array.from( pendingWriteItems ), 500 )
 
-            // console.log( 'commitPendingWriteItems', pendingWriteItems.size )
+            await Promise.all(
+                entryGroups.map( async entryGroup => {
+                    const batch = firestore.writeBatch( firestoreDB )
+                    entryGroup.forEach( ( [ id, data ] ) => {
+                        batch.set( firestore.doc( collectionRef, id ), data )
+                    } )
+                    await batch.commit()
+                } )
+            )
 
-            // if ( pendingWriteItems.size == 0 ) return
-
-            // // TODO handle this case
-            // if ( pendingWriteItems.size > 100 ) throw new Error( 'Too many pending write items' )
-
-            // const batch = firestore.writeBatch( firestoreDB )
-            // pendingWriteItems.forEach( ( data, id ) => {
-            //     /* 
-            //     deepClone is needed to fix weird firebase error:
-            //     FirebaseError: Function WriteBatch.set() called with invalid data. Unsupported field value: a custom Object object (found in field metadata in document cars/11111111111111111)
-            //     */
-            //     batch.set(
-            //         firestore.doc( collectionRef, id ),
-            //         {
-            //             date: deepClone( data, { isoString: 'date' } ),
-            //             isoString: data,
-            //         }[ modifiedAtType ],
-            //     )
-            // } )
-            // await batch.commit()
+            emit( 'serverWriteEnd' )
         }
     )
 
@@ -126,17 +119,15 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     // commitPendingWriteItems()
 
     type ParseResult = {
-        success: boolean,
-        data?: DocData,
-        error?: {
-            issues: {
-                message: string
-            }[]
-        },
+        success: true
+        data: DocData
+    } | {
+        success: false
+        error: z.ZodError
     }
 
     function cacheWrite ( id: string, docData: DocData ): [ string, ParseResult ] {
-        // logDeep( [ 'cacheWrite', id, docData, freerstoreDocSchema.safeParse( docData ) ] )
+        emit( 'cacheWriteStart' )
 
         const result = freerstoreDocSchema.safeParse( docData )
 
@@ -145,7 +136,6 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             keys.delete( freerstoreSectionKey )
             if ( keys.size > 0 ) {
                 result.data[ freerstoreSectionKey ].pendingWriteToServer = true
-                // logDeep( [ 'cacheWrite', id, result.data ] )
                 asyncStore.set(
                     firestore.doc( collectionRef, id ).id,
                     result.data
@@ -153,17 +143,32 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             } else {
                 const dataString = JSON.stringify( docData )
                 const message = `data is empty: ${ id }: ${ dataString }`
+                emit( 'cacheWriteEnd' )
                 return [ id, {
                     success: false,
-                    error: { issues: [ { message } ] }
+                    error: new z.ZodError( [ {
+                        code: 'custom',
+                        path: [],
+                        message
+                    } ] )
                 } ]
             }
-        } else {
-            if ( !result.success ) console.error( result.error.format() )
-            // if ( !result.success ) console.error( result.error?.flatten() )
-            // if ( !result.success ) console.error( result.error?.issues )
         }
+
+        emit( 'cacheWriteEnd' )
         return [ id, result ]
+    }
+
+    const eventHandlers = new Map<string, Set<Function>>()
+    function on ( eventName: CollectionEventName, handler: () => void ): void {
+        const handlers = eventHandlers.get( eventName ) ?? new Set()
+        handlers.add( handler )
+        eventHandlers.set( eventName, handlers )
+    }
+
+    function emit ( eventName: CollectionEventName ) {
+        const handlers = eventHandlers.get( eventName )
+        handlers?.forEach( handler => handler() )
     }
 
     return {
@@ -178,9 +183,17 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             modifiedAtType,
             serverWriteDelayMs,
         },
+        on,
+        async getDocFromServer ( id: string ): Promise<[ string, ParseResult ]> {
+            const docSnap = await firestore.getDoc( firestore.doc( collectionRef, id ) )
+            const result = freerstoreDocSchema.safeParse( docSnap.data() )
+            return [ id, result ]
+        },
+        async getDocFromCache ( id: string ): Promise<[ string, ParseResult ]> {
+            return [ id, await asyncStore.get( id ) ]
+        },
         setDoc ( id: string, docData: DocData ): [ string, ParseResult ] {
             const [ , result ] = cacheWrite( id, docData )
-
             commitPendingWriteItems()
             return [ id, result ]
         },
