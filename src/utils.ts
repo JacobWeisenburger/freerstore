@@ -40,3 +40,12 @@ export function deepClone (
         }
     )
 }
+
+export function defer () {
+    let resolve = () => { }
+    const promise = new Promise<void>( resolvePromise => resolve = resolvePromise )
+    return {
+        promise,
+        resolve: () => { resolve() },
+    }
+}

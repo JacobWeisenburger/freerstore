@@ -28,7 +28,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     freerstoreSectionKey = 'freerstore',
     modifiedAtKey = 'modifiedAt',
     modifiedAtType = 'isoString',
-    serverWriteDelayMs = 2000,
+    serverWriteDelayMs = 1000,
 }: {
     firebaseApp: FirebaseApp,
     name: string,
@@ -38,6 +38,8 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     modifiedAtType?: ModifiedAtPropType,
     serverWriteDelayMs?: number,
 } ) {
+    serverWriteDelayMs = Math.max( serverWriteDelayMs, 0 )
+
     type DocData = z.infer<DocSchema>
 
     const firestoreDB = firestore.getFirestore( firebaseApp )
@@ -80,31 +82,37 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         .db( firebaseApp.options.projectId )
         .asyncStore( name, freerstoreDocSchema )
 
+
+    function serverWrite ( id: string, result: ParseResult ) {
+        pendingWriteItems.set( id, result )
+        commitPendingWriteItems()
+    }
+
+    const pendingWriteItems = new Map<string, ParseResult>()
     const commitPendingWriteItems = debounce(
         serverWriteDelayMs,
         async () => {
             emit( 'serverWriteStart' )
 
-            const allItems = await asyncStore.getAll()
-
-            const pendingWriteItems = Array.from( allItems )
-                .reduce( ( map, [ key, result ] ) => {
+            const processedPendingWriteItems = Array.from( pendingWriteItems )
+                .reduce( ( map, [ id, result ] ) => {
+                    pendingWriteItems.delete( id )
                     if (
                         result.success &&
                         result.data[ freerstoreSectionKey ].pendingWriteToServer
                     ) {
                         delete result.data[ freerstoreSectionKey ].pendingWriteToServer
-                        map.set( key, result.data )
+                        map.set( id, result.data )
                     }
                     return map
                 }, new Map<string, Data>() )
 
-            const entryGroups = cluster( Array.from( pendingWriteItems ), 500 )
+            const groups = cluster( Array.from( processedPendingWriteItems ), 500 )
 
             await Promise.all(
-                entryGroups.map( async entryGroup => {
+                groups.map( async group => {
                     const batch = firestore.writeBatch( firestoreDB )
-                    entryGroup.forEach( ( [ id, data ] ) => {
+                    group.forEach( ( [ id, data ] ) => {
                         batch.set( firestore.doc( collectionRef, id ), data )
                     } )
                     await batch.commit()
@@ -115,7 +123,45 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         }
     )
 
-    // TODO deal with committing pending writes after a long time being offline
+    // const commitPendingWriteItems = debounce(
+    //     serverWriteDelayMs,
+    //     async () => {
+    //         emit( 'serverWriteStart' )
+
+    //         const allItems = await asyncStore.getAll()
+
+    //         const pendingWriteItems = Array.from( allItems )
+    //             .reduce( ( map, [ key, result ] ) => {
+    //                 if (
+    //                     result.success &&
+    //                     result.data[ freerstoreSectionKey ].pendingWriteToServer
+    //                 ) {
+    //                     delete result.data[ freerstoreSectionKey ].pendingWriteToServer
+    //                     map.set( key, result.data )
+    //                 }
+    //                 return map
+    //             }, new Map<string, Data>() )
+
+    //         console.log( 'pendingWriteItems', pendingWriteItems.size )
+
+    //         const entryGroups = cluster( Array.from( pendingWriteItems ), 500 )
+
+    //         await Promise.all(
+    //             entryGroups.map( async entryGroup => {
+    //                 const batch = firestore.writeBatch( firestoreDB )
+    //                 entryGroup.forEach( ( [ id, data ] ) => {
+    //                     batch.set( firestore.doc( collectionRef, id ), data )
+    //                 } )
+    //                 await batch.commit()
+    //             } )
+    //         )
+
+    //         emit( 'serverWriteEnd' )
+    //     }
+    // )
+
+    // TODO: medium priority:
+    // deal with committing pending writes after a long time being offline
     // commitPendingWriteItems()
 
     type ParseResult = {
@@ -160,15 +206,15 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     }
 
     const eventHandlers = new Map<string, Set<Function>>()
-    function on ( eventName: CollectionEventName, handler: () => void ): void {
+    function on ( eventName: CollectionEventName, handler: () => void ) {
         const handlers = eventHandlers.get( eventName ) ?? new Set()
         handlers.add( handler )
         eventHandlers.set( eventName, handlers )
+        return () => { eventHandlers.get( eventName )?.delete( handler ) }
     }
 
     function emit ( eventName: CollectionEventName ) {
-        const handlers = eventHandlers.get( eventName )
-        handlers?.forEach( handler => handler() )
+        eventHandlers.get( eventName )?.forEach( handler => handler() )
     }
 
     return {
@@ -194,7 +240,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         },
         setDoc ( id: string, docData: DocData ): [ string, ParseResult ] {
             const [ , result ] = cacheWrite( id, docData )
-            commitPendingWriteItems()
+            serverWrite( id, result )
             return [ id, result ]
         },
         setDocs ( docs: Record<string, DocData> = {} ) {
