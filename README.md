@@ -35,6 +35,12 @@
 - [TODO](#todo)
 
 ## Purpose
+To optimize firestore costs by:
+- batching and debouncing writes
+- caching documents in IndexedDB
+
+To provide a better developer experience by:
+- validating documents with `zod`
 
 ## Contribute
 Always open to ideas. Positive or negative, all are welcome. Feel free to contribute an [issue](https://github.com/JacobWeisenburger/freerstore/issues) or [PR](https://github.com/JacobWeisenburger/freerstore/pulls).
@@ -81,7 +87,7 @@ type DocumentData = z.infer<typeof documentSchema>
 
 const collection = freerstore.getCollection( {
     firebaseApp,
-    collectionName,
+    name: collectionName,
     documentSchema,
 } )
 
