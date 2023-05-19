@@ -38,7 +38,7 @@ describe( 'makeLastSync', () => {
         } )
 
         lastSync.set( date )
-        expect( lastSync.get().toISOString() ).toBe( date.toISOString() )
+        expect( lastSync.get()?.toISOString() ).toBe( date.toISOString() )
 
         lastSync.remove()
         expect( lastSync.get() ).toBe( lastSync.defaultLastSync )
