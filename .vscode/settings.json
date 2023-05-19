@@ -3,6 +3,6 @@
     "git.postCommitCommand": "sync",
     "git.enableSmartCommit": true,
     "terminal.integrated.defaultProfile.windows": "Git Bash",
-    "deno.enable": false,
+    "deno.enable": true,
     "deno.lint": false
 }
