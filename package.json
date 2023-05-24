@@ -21,8 +21,6 @@
         "build": "cls && deno run -A scripts/build.ts",
         "publish": "cls && deno run -A scripts/publish.ts",
         "build.publish": "npm run build && npm run publish",
-        "//build": "rm -rf dist && cls && tsc",
-        "//publish": "npm publish",
         "firebase:emulators": "firebase emulators:start --only firestore",
         "firebase:emulators.cmd": "start cmd /k npm run firebase:emulators",
         "test": "cls && jest",
