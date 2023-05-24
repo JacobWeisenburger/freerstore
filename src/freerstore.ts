@@ -41,6 +41,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     serverWriteDelayMs = Math.max( serverWriteDelayMs, 0 )
 
     type DocData = z.infer<DocSchema>
+    type DocResultsMap = ResultsMap<DocData>
 
     const firestoreDB = firestore.getFirestore( firebaseApp )
     if ( !firebaseApp.options.projectId ) throw new Error( 'Firebase project ID is required' )
@@ -237,6 +238,9 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         },
         async getDocFromCache ( id: string ): Promise<[ string, ParseResult ]> {
             return [ id, await asyncStore.get( id ) ]
+        },
+        async getAllFromCache (): Promise<DocResultsMap> {
+            return asyncStore.getAll()
         },
         setDoc ( id: string, docData: DocData ): [ string, ParseResult ] {
             const [ , result ] = cacheWrite( id, docData )

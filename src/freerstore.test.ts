@@ -61,6 +61,12 @@ describe( 'freerstore', () => {
 
         collection.setDocs( docs )
 
+        test( `getAllFromCache`, async () => {
+            await deferred.promise
+            const allDocs = await collection.getAllFromCache()
+            expect( allDocs.size ).toBe( Object.keys( docs ).length )
+        } )
+
         test( `after onSnapshot`, async () => {
             await deferred.promise
             expect( processedDocs.size ).toBe( Object.keys( docs ).length )
