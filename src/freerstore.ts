@@ -124,43 +124,6 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         }
     )
 
-    // const commitPendingWriteItems = debounce(
-    //     serverWriteDelayMs,
-    //     async () => {
-    //         emit( 'serverWriteStart' )
-
-    //         const allItems = await asyncStore.getAll()
-
-    //         const pendingWriteItems = Array.from( allItems )
-    //             .reduce( ( map, [ key, result ] ) => {
-    //                 if (
-    //                     result.success &&
-    //                     result.data[ freerstoreSectionKey ].pendingWriteToServer
-    //                 ) {
-    //                     delete result.data[ freerstoreSectionKey ].pendingWriteToServer
-    //                     map.set( key, result.data )
-    //                 }
-    //                 return map
-    //             }, new Map<string, Data>() )
-
-    //         console.log( 'pendingWriteItems', pendingWriteItems.size )
-
-    //         const entryGroups = cluster( Array.from( pendingWriteItems ), 500 )
-
-    //         await Promise.all(
-    //             entryGroups.map( async entryGroup => {
-    //                 const batch = firestore.writeBatch( firestoreDB )
-    //                 entryGroup.forEach( ( [ id, data ] ) => {
-    //                     batch.set( firestore.doc( collectionRef, id ), data )
-    //                 } )
-    //                 await batch.commit()
-    //             } )
-    //         )
-
-    //         emit( 'serverWriteEnd' )
-    //     }
-    // )
-
     // TODO: medium priority:
     // deal with committing pending writes after a long time being offline
     // commitPendingWriteItems()
@@ -173,10 +136,11 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         error: z.ZodError
     }
 
-    function cacheWrite ( id: string, docData: DocData ): [ string, ParseResult ] {
-        emit( 'cacheWriteStart' )
+    type ResultEntry = [ string, ParseResult ]
 
+    function cacheWrite ( id: string, docData: DocData ): ResultEntry {
         const result = freerstoreDocSchema.safeParse( docData )
+        emit( 'cacheWriteStart', [ id, result ] )
 
         if ( result.success ) {
             const keys = new Set( Object.keys( result.data ) )
@@ -186,11 +150,11 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
                 asyncStore.set(
                     firestore.doc( collectionRef, id ).id,
                     result.data
-                )
+                ).then( () => emit( 'cacheWriteEnd', [ id, result ] ) )
             } else {
                 const dataString = JSON.stringify( docData )
                 const message = `data is empty: ${ id }: ${ dataString }`
-                emit( 'cacheWriteEnd' )
+                emit( 'cacheWriteEnd', [ id, result ] )
                 return [ id, {
                     success: false,
                     error: new z.ZodError( [ {
@@ -202,20 +166,20 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             }
         }
 
-        emit( 'cacheWriteEnd' )
         return [ id, result ]
     }
 
-    const eventHandlers = new Map<string, Set<Function>>()
-    function on ( eventName: CollectionEventName, handler: () => void ) {
+    type EventHandler = ( resultEntry?: ResultEntry ) => void
+    const eventHandlers = new Map<string, Set<EventHandler>>()
+    function on ( eventName: CollectionEventName, handler: EventHandler ) {
         const handlers = eventHandlers.get( eventName ) ?? new Set()
         handlers.add( handler )
         eventHandlers.set( eventName, handlers )
         return () => { eventHandlers.get( eventName )?.delete( handler ) }
     }
 
-    function emit ( eventName: CollectionEventName ) {
-        eventHandlers.get( eventName )?.forEach( handler => handler() )
+    function emit ( eventName: CollectionEventName, resultEntry?: ResultEntry ) {
+        eventHandlers.get( eventName )?.forEach( handler => handler( resultEntry ) )
     }
 
     return {
@@ -231,18 +195,18 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             serverWriteDelayMs,
         },
         on,
-        async getDocFromServer ( id: string ): Promise<[ string, ParseResult ]> {
+        async getDocFromServer ( id: string ): Promise<ResultEntry> {
             const docSnap = await firestore.getDoc( firestore.doc( collectionRef, id ) )
             const result = freerstoreDocSchema.safeParse( docSnap.data() )
             return [ id, result ]
         },
-        async getDocFromCache ( id: string ): Promise<[ string, ParseResult ]> {
+        async getDocFromCache ( id: string ): Promise<ResultEntry> {
             return [ id, await asyncStore.get( id ) ]
         },
         async getAllFromCache (): Promise<DocResultsMap> {
             return asyncStore.getAll()
         },
-        setDoc ( id: string, docData: DocData ): [ string, ParseResult ] {
+        setDoc ( id: string, docData: DocData ): ResultEntry {
             const [ , result ] = cacheWrite( id, docData )
             serverWrite( id, result )
             return [ id, result ]
