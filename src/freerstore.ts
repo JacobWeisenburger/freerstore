@@ -6,6 +6,7 @@ import { debounce } from './debounce'
 import { ModifiedAtPropType } from './types'
 import { LocalDB } from './LocalDB'
 import { cluster } from 'radash'
+import { prune } from './utils'
 
 export type Result<DocData extends Record<string, unknown>> =
     z.SafeParseReturnType<DocData, DocData>
@@ -114,7 +115,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
                 groups.map( async group => {
                     const batch = firestore.writeBatch( firestoreDB )
                     group.forEach( ( [ id, data ] ) => {
-                        batch.set( firestore.doc( collectionRef, id ), data )
+                        batch.set( firestore.doc( collectionRef, id ), prune( data ) )
                     } )
                     await batch.commit()
                 } )
@@ -139,22 +140,25 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
     type ResultEntry = [ string, ParseResult ]
 
     function cacheWrite ( id: string, docData: DocData ): ResultEntry {
-        const result = freerstoreDocSchema.safeParse( docData )
-        emit( 'cacheWriteStart', [ id, result ] )
+        const docResult = documentSchema.safeParse( docData )
+        if ( !docResult.success ) return [ id, docResult ]
 
-        if ( result.success ) {
-            const keys = new Set( Object.keys( result.data ) )
+        const freerstoreDocResult = freerstoreDocSchema.safeParse( docResult.data )
+        emit( 'cacheWriteStart', [ id, freerstoreDocResult ] )
+
+        if ( freerstoreDocResult.success ) {
+            const keys = new Set( Object.keys( freerstoreDocResult.data ) )
             keys.delete( freerstoreSectionKey )
             if ( keys.size > 0 ) {
-                result.data[ freerstoreSectionKey ].pendingWriteToServer = true
+                freerstoreDocResult.data[ freerstoreSectionKey ].pendingWriteToServer = true
                 asyncStore.set(
                     firestore.doc( collectionRef, id ).id,
-                    result.data
-                ).then( () => emit( 'cacheWriteEnd', [ id, result ] ) )
+                    freerstoreDocResult.data
+                ).then( () => emit( 'cacheWriteEnd', [ id, freerstoreDocResult ] ) )
             } else {
-                const dataString = JSON.stringify( docData )
+                const dataString = JSON.stringify( docResult.data )
                 const message = `data is empty: ${ id }: ${ dataString }`
-                emit( 'cacheWriteEnd', [ id, result ] )
+                emit( 'cacheWriteEnd', [ id, freerstoreDocResult ] )
                 return [ id, {
                     success: false,
                     error: new z.ZodError( [ {
@@ -166,7 +170,7 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             }
         }
 
-        return [ id, result ]
+        return [ id, freerstoreDocResult ]
     }
 
     type EventHandler = ( resultEntry?: ResultEntry ) => void

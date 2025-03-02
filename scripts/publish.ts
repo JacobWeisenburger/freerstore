@@ -1,18 +1,26 @@
-console.log( 'Publishing...' )
+import { $ } from 'bun'
+import * as Path from 'node:path'
 
-Deno.chdir( 'dist' )
-console.log( Deno.cwd() )
+// https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+// https://dev.to/astagi/publish-to-npm-using-github-actions-23fn
 
-try {
-    const command = new Deno.Command( 'cmd', { args: [ '/c', 'npm publish' ] } )
-    const { stdout, stderr } = await command.output()
-    console.log( new TextDecoder().decode( stdout ) )
-    throw new Error( new TextDecoder().decode( stderr ) )
-} catch ( error ) {
-    console.group( 'Error:' )
-    console.log( error )
-    console.groupEnd()
+const logError = ( ctx?: object ) => ( { message }: Error ) => {
+    const data = { message, ...ctx }
+    console.error( 'Error:', JSON.stringify( data, null, 2 ) )
 }
-console.log( 'npm publish: ran' )
 
-console.log( 'Publish: done' )
+const root = Path.join( import.meta.dir, '..' )
+const dist = Path.join( root, 'dist' )
+
+await Promise.resolve()
+    .then( () => console.log( 'Publishing...' ) )
+
+    .then( async () => {
+        const section = 'npm publish'
+        await $`cd ${ dist } && npm publish --access public`
+            .then( () => console.log( 'npm publish: ran' ) )
+            .catch( logError( { section } ) )
+    } )
+
+    .then( () => console.log( 'Publish: done' ) )
+    .catch( logError( { path: import.meta.path } ) )

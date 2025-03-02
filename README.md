@@ -1,10 +1,7 @@
 <div align='center'>
-    <!-- <img src='logo.svg' width='200px' alt='Freerstore logo' /> -->
     <h1>Freerstore</h1>
     <h3>Firestore cost optimizer</h3>
 </div>
-
-<br>
 
 <div align='center'>
     <a href='https://github.com/JacobWeisenburger' rel='nofollow'>
@@ -24,6 +21,18 @@
         <img alt='downloads' src='https://img.shields.io/npm/dw/freerstore?color=blue'>
     </a>
 </div>
+
+<div align="center">
+    <a href="https://github.com/JacobWeisenburger/freerstore#freerstore">Docs</a>
+    <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+    <a href="https://github.com/JacobWeisenburger/freerstore">github</a>
+    <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+    <a href="https://www.npmjs.com/package/freerstore">npm</a>
+</div>
+
+<!-- Dist Readme Stops Here -->
+
+<br />
 
 ## Table of contents
 - [Purpose](#purpose)

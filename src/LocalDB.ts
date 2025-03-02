@@ -51,6 +51,9 @@ export module LocalDB {
                     async set ( key: string, input: Input ) {
                         const parsed = schema.safeParse( input )
                         if ( parsed.success ) await store.setItem( key, parsed.data )
+                            .catch( error => {
+                                console.error( 'LocalDB.set:', 'localforage', error.message )
+                            } )
                         return parsed
                     },
                     async remove ( key: string ) {
@@ -67,11 +70,11 @@ export module LocalDB {
                 type Result = z.SafeParseReturnType<Input, Output>
 
                 function stringify ( data: any ) {
-                    const spaces = getExeCtx() == 'node' ? 4 : 0
+                    const spaces = getExeCtx() == 'server' ? 4 : 0
                     return JSON.stringify( data, null, spaces )
                 }
 
-                const delimiter = getExeCtx() == 'node' ? '~' : '/'
+                const delimiter = getExeCtx() == 'server' ? '~' : '/'
                 function pathToString ( path: Path ): string {
                     const { dbName, storeName, key, ext } = path
                     return [
@@ -85,7 +88,7 @@ export module LocalDB {
                         dbName: db.name,
                         storeName: name,
                         key,
-                        ext: getExeCtx() == 'node' ? 'json' : undefined,
+                        ext: getExeCtx() == 'server' ? 'json' : undefined,
                     } )
                 }
 
