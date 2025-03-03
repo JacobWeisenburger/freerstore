@@ -13,14 +13,6 @@ export type Result<DocData extends Record<string, unknown>> =
 
 export type ResultsMap<DocData extends Record<string, unknown>> = Map<string, Result<DocData>>
 
-export type CollectionEventName = typeof collectionEventNames[ number ]
-export const collectionEventNames = [
-    'cacheWriteStart',
-    'cacheWriteEnd',
-    'serverWriteStart',
-    'serverWriteEnd',
-] as const
-
 export type Collection = ReturnType<typeof getCollection>
 export function getCollection<DocSchema extends z.AnyZodObject> ( {
     firebaseApp,
@@ -114,9 +106,27 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
             await Promise.all(
                 groups.map( async group => {
                     const batch = firestore.writeBatch( firestoreDB )
+
+
+                    /* TODO error emitting */
+
                     group.forEach( ( [ id, data ] ) => {
-                        batch.set( firestore.doc( collectionRef, id ), prune( data ) )
+                        const prunedData = prune( data )
+                        try {
+                            // batch.set( firestore.doc( collectionRef, id ), data )
+                            batch.set( firestore.doc( collectionRef, id ), prunedData )
+                        } catch ( error ) {
+                            emit( 'batchSetError', {
+                                error,
+                                data,
+                                prunedData
+                            } )
+                        }
                     } )
+
+                    /* TODO error emitting */
+
+
                     await batch.commit()
                 } )
             )
@@ -173,17 +183,31 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
         return [ id, freerstoreDocResult ]
     }
 
-    type EventHandler = ( resultEntry?: ResultEntry ) => void
-    const eventHandlers = new Map<string, Set<EventHandler>>()
-    function on ( eventName: CollectionEventName, handler: EventHandler ) {
-        const handlers = eventHandlers.get( eventName ) ?? new Set()
+    type Events = {
+        cacheWriteStart: ( resultEntry?: ResultEntry ) => void
+        cacheWriteEnd: ( resultEntry?: ResultEntry ) => void
+        serverWriteStart: ( resultEntry?: ResultEntry ) => void
+        serverWriteEnd: ( resultEntry?: ResultEntry ) => void
+        batchSetError: ( ctx?: {
+            error: unknown
+            data: unknown
+            prunedData: unknown
+        } ) => void
+    }
+    type EventKey = keyof Events
+    type EventHandler<Key extends EventKey> = Events[ Key ]
+    type Arg<Key extends EventKey> = Parameters<EventHandler<Key>>[ 0 ]
+
+    const eventHandlers = new Map<EventKey, Set<EventHandler<EventKey>>>()
+    function on<Key extends EventKey> ( key: Key, handler: EventHandler<Key> ) {
+        const handlers = eventHandlers.get( key ) ?? new Set()
         handlers.add( handler )
-        eventHandlers.set( eventName, handlers )
-        return () => { eventHandlers.get( eventName )?.delete( handler ) }
+        eventHandlers.set( key, handlers )
+        return () => { eventHandlers.get( key )?.delete( handler ) }
     }
 
-    function emit ( eventName: CollectionEventName, resultEntry?: ResultEntry ) {
-        eventHandlers.get( eventName )?.forEach( handler => handler( resultEntry ) )
+    function emit<Key extends EventKey> ( key: Key, arg?: Arg<Key> ) {
+        eventHandlers.get( key )?.forEach( handler => handler( arg as any ) )
     }
 
     return {
@@ -221,6 +245,16 @@ export function getCollection<DocSchema extends z.AnyZodObject> ( {
                     .map( ( [ id, docData ] ) => this.setDoc( id, docData ) )
             )
         },
+
+        // onError (
+        //     handler: ( error: unknown, ctx: { data: unknown } ) => void = () => { }
+        // ): firestore.Unsubscribe {
+        //     let unsubscribe: firestore.Unsubscribe = () => { }
+        //     handler
+        //     return () => {
+        //         unsubscribe()
+        //     }
+        // },
 
         onSnapshot (
             handler: ( map: ResultsMap<DocData> ) => void = () => { }

@@ -41,7 +41,8 @@ await Promise.resolve()
             format: 'esm',
             minify: true,
             sourcemap: 'inline',
-            target: 'node',
+            // target: 'node',
+            target: 'browser',
             external: [ 'firebase', 'zod' ],
         }
         await Bun.build( config )
@@ -53,9 +54,9 @@ await Promise.resolve()
     } )
 
     .then( async () => {
-        const section = 'Reduced package.json: written'
-        const distPath = Path.join( dist, 'package.json' )
         const { scripts, devDependencies, nodemonConfig, ...reduced } = packageJSON
+        const section = `Reduced package.json: written: ${ reduced.version }`
+        const distPath = Path.join( dist, 'package.json' )
 
         await Bun.write( distPath, JSON.stringify( reduced, null, 4 ) )
             .then( () => console.log( section ) )
