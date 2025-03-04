@@ -1,3 +1,3 @@
 export function getExeCtx () {
-    return typeof process.env != undefined ? 'server' : 'browser'
+    return typeof process === 'undefined' ? 'browser' : 'server'
 }

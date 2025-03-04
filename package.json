@@ -1,6 +1,6 @@
 {
     "name": "freerstore",
-    "version": "0.6.5",
+    "version": "0.6.6",
     "main": "src/index.ts",
     "author": "Jacob Weisenburger",
     "license": "MIT",
@@ -15,7 +15,7 @@
         "typescript"
     ],
     "scripts": {
-        "dev": "bun --watch ./src/dev",
+        "dev": "bun --watch ./dev",
         "dev.cmd": "start cmd /k npm run dev",
         "build": "cls && bun run scripts/build.ts",
         "build.cmd": "start cmd /k npm run build",
@@ -28,21 +28,12 @@
         "test.watch": "npm run test -- --watch",
         "test.watch.cmd": "start cmd /k npm run test.watch"
     },
-    "nodemonConfig": {
-        "watch": [
-            "./"
-        ],
-        "ignore": [
-            "./tmp"
-        ],
-        "ext": "",
-        "exec": "cls && npm run start.dev"
-    },
     "peerDependencies": {
         "firebase": "^9.19.1",
         "zod": "^3.24.2"
     },
     "devDependencies": {
+        "typescript": "^5.8.2",
         "@anatine/zod-mock": "^3.10.0",
         "@faker-js/faker": "^7.6.0",
         "@types/bun": "^1.2.4",

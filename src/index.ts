@@ -1,4 +1,6 @@
-import * as freerstore from './freerstore'
+export * from './freerstore'
+// import * as freerstore from './freerstore'
+import { freerstore } from './freerstore'
 export { freerstore }
 export default freerstore
 

@@ -54,7 +54,7 @@ await Promise.resolve()
     } )
 
     .then( async () => {
-        const { scripts, devDependencies, nodemonConfig, ...reduced } = packageJSON
+        const { scripts, devDependencies, ...reduced } = packageJSON
         const section = `Reduced package.json: written: ${ reduced.version }`
         const distPath = Path.join( dist, 'package.json' )
 
