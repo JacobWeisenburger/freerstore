@@ -1,0 +1,1 @@
+https://bundlejs.com/?q=freerstore%400.6.6
