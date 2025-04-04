@@ -1,14 +1,19 @@
 export {
+    getFirestore,
     collection,
-    CollectionReference, connectFirestoreEmulator, doc,
-    DocumentReference, Firestore, getDoc, onSnapshot, query,
-    QueryConstraint, QueryDocumentSnapshot, QuerySnapshot, setDoc, where, writeBatch
+    CollectionReference,
+    doc,
+    DocumentReference,
+    getDoc,
+    setDoc,
+    query,
+    where,
+    onSnapshot,
+    QuerySnapshot,
+    QueryDocumentSnapshot,
+    writeBatch,
+    connectFirestoreEmulator,
 } from 'firebase/firestore'
-
-import { Result } from '@weis-guys/result'
-import { FirebaseApp } from 'firebase/app'
-import { CollectionReference, DocumentReference, getFirestore, Timestamp } from 'firebase/firestore'
-import { z } from 'zod'
 
 /* 
 handles the error:
@@ -17,7 +22,15 @@ The requested module 'firebase/firestore' does not provide an export named 'Unsu
 /** Removes the listener when invoked. */
 export type Unsubscribe = () => void
 
+import {
+    CollectionReference,
+    DocumentReference,
+} from 'firebase/firestore'
+
 export type Ref = DocumentReference | CollectionReference
+
+import { Timestamp } from 'firebase/firestore'
+import { z } from 'zod'
 
 export const dateSchema = z.union( [
     z.date(),
@@ -38,12 +51,3 @@ export const dateSchema = z.union( [
 ] )
 
 export const isoStringSchema = dateSchema.transform( x => x?.toISOString() )
-
-export function getFirestoreResult ( firebaseApp: FirebaseApp ) {
-    try {
-        const firestoreDB = getFirestore( firebaseApp )
-        return Result.ok( firestoreDB )
-    } catch ( error ) {
-        return Result.err( error as Error )
-    }
-}

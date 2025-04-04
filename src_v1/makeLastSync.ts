@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { Firestore } from './Firestore'
+import { firestore } from './firestore'
 import { LocalDB } from './LocalDB'
 import { ModifiedAtPropType } from './types'
+import { logDeep } from './utils'
 
 export type LastSyncProps<Type extends ModifiedAtPropType = 'isoString'> = {
     dbName: string
@@ -17,13 +18,13 @@ export function makeLastSync<Type extends ModifiedAtPropType = 'isoString'> ( {
     const type = modifiedAtType ?? 'isoString' as Type
 
     const schema = {
-        isoString: Firestore.isoStringSchema,
-        date: Firestore.dateSchema,
+        isoString: firestore.isoStringSchema,
+        date: firestore.dateSchema,
     }[ type ]
 
     type Value = z.infer<typeof schema>
 
-    const store = LocalDB.db( dbName ).syncStore( storeName )
+    const store = LocalDB.db( dbName ).syncStore( storeName, schema )
 
     const getValue = ( date: Date ): Value =>
         ( { date, isoString: date.toISOString() }[ type ] )

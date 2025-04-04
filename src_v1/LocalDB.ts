@@ -1,10 +1,11 @@
 import localforage from 'localforage'
-import { getExeCtx, safeParseJSON } from './utils'
 import { z } from 'zod'
+import { getExeCtx } from './getExeCtx'
+import { logDeep, safeParseJSON } from './utils'
 
 // https://localforage.github.io/localForage/
 
-export namespace LocalDB {
+export module LocalDB {
 
     type Path = {
         dbName: string,
@@ -16,30 +17,58 @@ export namespace LocalDB {
     export function db ( name: string ) {
         const db = {
             name,
-            asyncStore ( name: string ) {
+            asyncStore<Schema extends z.Schema> (
+                name: string,
+                schema: Schema,
+            ) {
+                type Input = z.input<Schema>
+                type Output = z.output<Schema>
+                type Result = z.SafeParseReturnType<Input, Output>
+
                 const store = localforage.createInstance( {
                     name: db.name,
                     storeName: name,
                     driver: localforage.INDEXEDDB,
                 } )
 
-                /* init asyncStore with no data */
-                store.ready()
+                async function get ( key: string ) {
+                    const value = await store.getItem( key )
+                    return schema.safeParse( value )
+                }
+
+                async function getAll () {
+                    const map = new Map<string, Result>()
+                    await store.iterate( ( value, key ) => {
+                        map.set( key, schema.safeParse( value ) )
+                    } )
+                    return map
+                }
 
                 return {
                     name,
-                    getItem: store.getItem,
-                    setItem: store.setItem,
-                    removeItem: store.removeItem,
-                    async getAll () {
-                        const map = new Map<string, unknown>()
-                        await store.iterate( ( value, key ) => { map.set( key, value ) } )
-                        return map
+                    getAll,
+                    get,
+                    async set ( key: string, input: Input ) {
+                        const parsed = schema.safeParse( input )
+                        if ( parsed.success ) await store.setItem( key, parsed.data )
+                            .catch( error => {
+                                console.error( 'LocalDB.set:', 'localforage', error.message )
+                            } )
+                        return parsed
+                    },
+                    async remove ( key: string ) {
+                        return store.removeItem( key )
                     },
                 }
             },
+            syncStore<Schema extends z.Schema> (
+                name: string,
+                schema: Schema,
+            ) {
+                type Input = z.input<Schema>
+                type Output = z.output<Schema>
+                type Result = z.SafeParseReturnType<Input, Output>
 
-            syncStore ( name: string ) {
                 function stringify ( data: any ) {
                     const spaces = getExeCtx() == 'server' ? 4 : 0
                     return JSON.stringify( data, null, spaces )
@@ -63,11 +92,12 @@ export namespace LocalDB {
                     } )
                 }
 
-                function get ( key: string ) {
+                function get ( key: string ): Result {
                     const pathString = pathStringFromKey( key )
                     const persistedValue = localStorage.getItem( pathString )
                     const value = persistedValue == 'undefined' ? null : persistedValue
-                    return safeParseJSON( value ?? 'null' )
+                    const parsed = schema.safeParse( safeParseJSON( value ?? 'null' ) )
+                    return parsed
                 }
 
                 function parsePath ( x: unknown ) {
@@ -80,8 +110,8 @@ export namespace LocalDB {
                         } ).safeParse( x )
                 }
 
-                function getAll () {
-                    const map = new Map<string, unknown>()
+                function getAll (): Map<string, Result> {
+                    const map = new Map()
                     for ( let i = 0; i < localStorage.length; i++ ) {
                         const pathString = localStorage.key( i )
 
@@ -103,10 +133,13 @@ export namespace LocalDB {
                     getAll,
                     pathStringFromKey,
                     parsePath,
-                    set ( key: string, data: unknown ) {
+                    set ( key: string, input: Input ) {
                         const pathString = pathStringFromKey( key )
-                        localStorage.setItem( pathString, stringify( data ) )
-                        return { key, data }
+                        const parsed = schema.safeParse( input )
+                        if ( parsed.success ) {
+                            localStorage.setItem( pathString, stringify( parsed.data ) )
+                        }
+                        return parsed
                     },
                     remove ( key: string ) {
                         const pathString = pathStringFromKey( key )
@@ -118,4 +151,5 @@ export namespace LocalDB {
 
         return db
     }
+
 }

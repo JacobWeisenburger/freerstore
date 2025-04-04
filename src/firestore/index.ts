@@ -1,1 +1,1 @@
-export * as firestore from './firestore'
+export * as Firestore from './Firestore'
