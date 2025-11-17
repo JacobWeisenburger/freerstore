@@ -1,6 +1,6 @@
 {
     "name": "freerstore",
-    "version": "0.6.6",
+    "version": "0.6.7",
     "main": "src/index.ts",
     "author": "Jacob Weisenburger",
     "license": "MIT",

@@ -40,8 +40,9 @@ await Promise.resolve()
             entrypoints: [ './src/index.ts' ],
             format: 'esm',
             minify: true,
-            sourcemap: 'inline',
-            // target: 'node',
+            // sourcemap: 'inline',
+            // minify: false,
+            sourcemap: 'external',
             target: 'browser',
             external: [ 'firebase', 'zod' ],
         }
